@@ -1,0 +1,35 @@
+{
+  "name": "fleetdeck",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "directories": {
+    "doc": "doc"
+  },
+  "scripts": {
+    "build": "npm run build --workspace=@fleetdeck/backend && npm run build --workspace=@fleetdeck/remote-gateway && npm run build --workspace=@fleetdeck/frontend",
+    "audit:prod": "npm audit --omit=dev --workspaces",
+    "check": "npm run build && npm run audit:prod"
+  },
+  "keywords": ["server-management", "ssh", "rdp", "vnc", "ansible", "docker"],
+  "author": "FleetDeck contributors",
+  "license": "GPL-3.0-only",
+  "description": "A secure, self-hosted server fleet management console for SSH, RDP, VNC, batch jobs and reusable playbooks.",
+  "homepage": "https://github.com/Sakurame1/FleetDeck#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sakurame1/FleetDeck.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Sakurame1/FleetDeck/issues"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1",
+    "vue": "3.5.40"
+  }
+}

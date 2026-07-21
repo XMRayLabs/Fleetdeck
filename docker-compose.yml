@@ -1,0 +1,120 @@
+name: fleetdeck
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: packages/frontend/Dockerfile
+      args:
+        VITE_PROJECT_REPOSITORY_URL: "${VITE_PROJECT_REPOSITORY_URL:-https://github.com/Sakurame1/FleetDeck}"
+    image: fleetdeck-frontend:local
+    ports:
+      - "${WEB_PORT:-18111}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+      remote-gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [fleetdeck-network]
+
+  backend:
+    build:
+      context: .
+      dockerfile: packages/backend/Dockerfile
+    image: fleetdeck-backend:local
+    env_file: [.env]
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATA_DIR: /app/data
+      ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
+      SESSION_SECRET_FILE: /run/secrets/session_secret
+      REMOTE_GATEWAY_SHARED_SECRET_FILE: /run/secrets/remote_gateway_secret
+      REQUIRE_EXTERNAL_SECRETS: "true"
+      COOKIE_SECURE: "${COOKIE_SECURE:-true}"
+      BATCH_UPLOAD_MAX_MB: "${BATCH_UPLOAD_MAX_MB:-200}"
+    secrets: [encryption_key, session_secret, remote_gateway_secret]
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/v1/status').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [fleetdeck-network]
+
+  remote-gateway:
+    build:
+      context: .
+      dockerfile: packages/remote-gateway/Dockerfile
+    image: fleetdeck-remote-gateway:local
+    environment:
+      NODE_ENV: production
+      GUACD_HOST: guacd
+      GUACD_PORT: 4822
+      REMOTE_GATEWAY_API_PORT: 9090
+      REMOTE_GATEWAY_WS_PORT: 8080
+      REMOTE_GATEWAY_SHARED_SECRET_FILE: /run/secrets/remote_gateway_secret
+    secrets: [remote_gateway_secret]
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9090/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      guacd:
+        condition: service_started
+    networks: [fleetdeck-network]
+
+  guacd:
+    image: guacamole/guacd:1.6.0
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    networks: [fleetdeck-network]
+
+secrets:
+  encryption_key:
+    file: ./secrets/encryption_key
+  session_secret:
+    file: ./secrets/session_secret
+  remote_gateway_secret:
+    file: ./secrets/remote_gateway_secret
+
+networks:
+  fleetdeck-network:
+    driver: bridge

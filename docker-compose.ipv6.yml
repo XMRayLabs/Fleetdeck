@@ -1,0 +1,20 @@
+services:
+  frontend:
+    networks:
+      - fleetdeck-ipv6
+  backend:
+    networks:
+      - fleetdeck-ipv6
+  remote-gateway:
+    networks:
+      - fleetdeck-ipv6
+  guacd:
+    networks:
+      - fleetdeck-ipv6
+
+networks:
+  fleetdeck-ipv6:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: "${FLEETDECK_IPV6_SUBNET:-fd01::/80}"
