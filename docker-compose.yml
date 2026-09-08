@@ -6,8 +6,8 @@ services:
       context: .
       dockerfile: packages/frontend/Dockerfile
       args:
-        VITE_PROJECT_REPOSITORY_URL: "${VITE_PROJECT_REPOSITORY_URL:-https://github.com/Sakurame1/FleetDeck}"
-    image: fleetdeck-frontend:local
+        VITE_PROJECT_REPOSITORY_URL: "${VITE_PROJECT_REPOSITORY_URL:-https://github.com/XMRayLabs/Fleetdeck}"
+    image: ${FLEETDECK_IMAGE_NAMESPACE:-sakurame1}/fleetdeck-frontend:${FLEETDECK_IMAGE_TAG:-latest}
     ports:
       - "${WEB_PORT:-18111}:8080"
     depends_on:
@@ -36,7 +36,7 @@ services:
     build:
       context: .
       dockerfile: packages/backend/Dockerfile
-    image: fleetdeck-backend:local
+    image: ${FLEETDECK_IMAGE_NAMESPACE:-sakurame1}/fleetdeck-backend:${FLEETDECK_IMAGE_TAG:-latest}
     env_file: [.env]
     environment:
       NODE_ENV: production
@@ -70,7 +70,7 @@ services:
     build:
       context: .
       dockerfile: packages/remote-gateway/Dockerfile
-    image: fleetdeck-remote-gateway:local
+    image: ${FLEETDECK_IMAGE_NAMESPACE:-sakurame1}/fleetdeck-remote-gateway:${FLEETDECK_IMAGE_TAG:-latest}
     environment:
       NODE_ENV: production
       GUACD_HOST: guacd

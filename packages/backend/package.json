@@ -9,12 +9,10 @@
       "dev": "tsx watch src/index.ts"
    },
    "dependencies": {
-      "@simplewebauthn/server": "13.1.1",
-      "@types/archiver": "^6.0.3",
+      "@simplewebauthn/server": "13.3.3",
       "@types/multer": "^1.4.12",
       "@types/session-file-store": "^1.2.5",
       "@types/uuid": "^10.0.0",
-      "adm-zip": "^0.6.0",
       "archiver": "^7.0.1",
       "archiver-zip-encrypted": "^2.0.0",
       "axios": "^1.9.0",
@@ -46,7 +44,7 @@
       "xterm": "^5.3.0"
    },
    "devDependencies": {
-      "@types/adm-zip": "^0.5.7",
+      "@types/archiver": "^6.0.3",
       "@types/bcrypt": "^5.0.2",
       "@types/express": "^5.0.1",
       "@types/express-session": "^1.18.1",

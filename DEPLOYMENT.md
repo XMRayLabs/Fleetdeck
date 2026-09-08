@@ -26,6 +26,8 @@ Windows 使用 `./scripts/init-secrets.ps1`。不要提交 `.env`、`data` 或 `
 DEPLOYMENT_MODE=docker
 WEB_PORT=18111
 COOKIE_SECURE=true
+FLEETDECK_IMAGE_NAMESPACE=sakurame1
+FLEETDECK_IMAGE_TAG=latest
 RP_ID=fleet.example.com
 RP_ORIGIN=https://fleet.example.com
 APP_ORIGIN=https://fleet.example.com
@@ -37,7 +39,8 @@ APP_ORIGIN=https://fleet.example.com
 
 ```bash
 docker compose config
-docker compose up -d --build
+docker compose pull
+docker compose up -d --no-build
 docker compose ps
 docker compose logs --tail=100 backend remote-gateway
 ```
@@ -63,13 +66,11 @@ Compose 只发布 `${WEB_PORT}`。不要额外发布 3001、8080、9090 或 4822
 ## 6. 更新
 
 ```bash
-git pull --ff-only
-npm audit --omit=dev --workspaces
-docker compose build --pull
-docker compose up -d
+docker compose pull
+docker compose up -d --no-build
 ```
 
-更新前先备份。不要使用第三方 GitHub 代理、非官方 npm 镜像或未知 Docker 镜像加速地址。
+更新前先备份。正式版本发布时可将 `FLEETDECK_IMAGE_TAG` 固定为目标版本；回滚时恢复上一个版本号并重新启动。不要使用第三方 GitHub 代理、非官方 npm 镜像或未知 Docker 镜像加速地址。
 
 ## IPv6
 

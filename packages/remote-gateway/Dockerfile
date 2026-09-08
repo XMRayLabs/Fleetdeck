@@ -20,9 +20,13 @@ RUN npm ci --omit=dev --workspace=@fleetdeck/remote-gateway --include-workspace-
 
 FROM node:24-bookworm-slim
 ENV NODE_ENV=production
-WORKDIR /app
-COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
+WORKDIR /app/packages/remote-gateway
+# npm workspaces may install production dependencies in either the repository
+# root or the workspace directory. Preserve both locations so Node's normal
+# module resolution can find every runtime package.
+COPY --from=production-dependencies --chown=node:node /app /app
 COPY --from=builder --chown=node:node /app/packages/remote-gateway/dist ./dist
+RUN node -e "for (const name of Object.keys(require('./package.json').dependencies || {})) require.resolve(name)"
 USER node
 EXPOSE 9090 8080
 CMD ["node", "dist/server.js"]

@@ -33,7 +33,8 @@ FleetDeck 是面向几十台乃至更多服务器的自托管运维控制台。�
 ```bash
 cp .env.example .env
 ./scripts/init-secrets.sh
-docker compose up -d --build
+docker compose pull
+docker compose up -d --no-build
 ```
 
 Windows PowerShell：
@@ -41,7 +42,8 @@ Windows PowerShell：
 ```powershell
 Copy-Item .env.example .env
 ./scripts/init-secrets.ps1
-docker compose up -d --build
+docker compose pull
+docker compose up -d --no-build
 ```
 
 部署前必须修改 `.env` 中的 `RP_ID`、`RP_ORIGIN` 和 `APP_ORIGIN`。正式环境应保持 `COOKIE_SECURE=true`，并仅通过 HTTPS 暴露 Web 端口。完整说明见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
@@ -78,7 +80,7 @@ npm run audit:prod
 
 ## 项目仓库
 
-FleetDeck 的官方代码仓库是 [Sakurame1/FleetDeck](https://github.com/Sakurame1/FleetDeck)。问题反馈、安全公告和后续版本均以该仓库为准。
+FleetDeck 的官方代码仓库是 [XMRayLabs/Fleetdeck](https://github.com/XMRayLabs/Fleetdeck)。问题反馈、安全公告和后续版本均以该仓库为准。
 
 About 页面仅通过 GitHub 官方 API 检查该仓库的 Release。自定义构建可以通过 `VITE_PROJECT_REPOSITORY_URL` 覆盖仓库地址；后端仍会将其严格限制为 `github.com` 官方地址。
 

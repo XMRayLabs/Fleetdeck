@@ -1,7 +1,7 @@
 FROM node:24-bookworm-slim AS builder
 
 WORKDIR /app
-ARG VITE_PROJECT_REPOSITORY_URL="https://github.com/Sakurame1/FleetDeck"
+ARG VITE_PROJECT_REPOSITORY_URL="https://github.com/XMRayLabs/Fleetdeck"
 ENV VITE_PROJECT_REPOSITORY_URL=${VITE_PROJECT_REPOSITORY_URL}
 COPY package.json package-lock.json ./
 COPY packages/backend/package.json ./packages/backend/

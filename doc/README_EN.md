@@ -17,7 +17,8 @@ FleetDeck is a secure, self-hosted operations console for SSH, RDP, VNC, proxies
 ```bash
 cp .env.example .env
 ./scripts/init-secrets.sh
-docker compose up -d --build
+docker compose pull
+docker compose up -d --no-build
 ```
 
 Set `RP_ID`, `RP_ORIGIN`, and `APP_ORIGIN` to the final HTTPS hostname first. See [DEPLOYMENT.md](../DEPLOYMENT.md) for the complete production checklist.
@@ -34,7 +35,7 @@ npm run audit:prod
 
 ## Repository
 
-The official repository is [Sakurame1/FleetDeck](https://github.com/Sakurame1/FleetDeck). Issues, security advisories, and future releases are published there.
+The official repository is [XMRayLabs/Fleetdeck](https://github.com/XMRayLabs/Fleetdeck). Issues, security advisories, and future releases are published there.
 
 ## License
 

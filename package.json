@@ -17,13 +17,13 @@
   "author": "FleetDeck contributors",
   "license": "GPL-3.0-only",
   "description": "A secure, self-hosted server fleet management console for SSH, RDP, VNC, batch jobs and reusable playbooks.",
-  "homepage": "https://github.com/Sakurame1/FleetDeck#readme",
+  "homepage": "https://github.com/XMRayLabs/Fleetdeck#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Sakurame1/FleetDeck.git"
+    "url": "git+https://github.com/XMRayLabs/Fleetdeck.git"
   },
   "bugs": {
-    "url": "https://github.com/Sakurame1/FleetDeck/issues"
+    "url": "https://github.com/XMRayLabs/Fleetdeck/issues"
   },
   "engines": {
     "node": ">=24.0.0"
