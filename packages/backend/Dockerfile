@@ -35,6 +35,8 @@ COPY --from=builder --chown=node:node /app/packages/backend/dist ./dist
 COPY --from=builder --chown=node:node /app/packages/backend/html-presets ./html-presets
 RUN node -e "for (const name of Object.keys(require('./package.json').dependencies || {}).filter((name) => !name.startsWith('@types/'))) require.resolve(name)"
 USER node
+COPY --chown=node:node scripts/smoke-backend.mjs /app/smoke-backend.mjs
+RUN --mount=type=tmpfs,target=/tmp node /app/smoke-backend.mjs
 RUN node -e "const db = new (require('sqlite3').Database)(':memory:'); db.serialize(() => { db.run('CREATE TABLE smoke (value INTEGER)'); db.run('INSERT INTO smoke VALUES (42)'); db.get('SELECT value FROM smoke', (err, row) => { if (err || row.value !== 42) process.exit(1); db.close(); }); });"
 EXPOSE 3001
 CMD ["node", "dist/index.js"]

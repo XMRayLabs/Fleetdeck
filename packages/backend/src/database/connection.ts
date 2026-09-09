@@ -5,7 +5,7 @@ import fs from 'fs';
 import { tableDefinitions } from './schema.registry';
 import { runMigrations } from './migrations'; // +++ Import runMigrations +++
 
-const dbDir = path.join(__dirname, '..', '..', 'data');
+const dbDir = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data');
 const dbFilename = 'fleetdeck.db';
 const dbPath = path.join(dbDir, dbFilename);
 const legacyDbPath = path.join(dbDir, 'nexus-terminal.db');
