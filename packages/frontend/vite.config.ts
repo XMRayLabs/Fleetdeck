@@ -4,11 +4,19 @@ import monacoEditorPlugin from 'vite-plugin-monaco-editor';
 import tailwindcss from '@tailwindcss/vite'
 // https://vitejs.dev/config/
 export default defineConfig({
+  define: {
+    // Interpret message ASTs instead of compiling translations with new Function.
+    __INTLIFY_JIT_COMPILATION__: true,
+  },
   plugins: [
     vue(),
     tailwindcss(),
     // @ts-ignore because the plugin type might not perfectly match Vite's expected PluginOption type
-    (monacoEditorPlugin as any).default({})
+    {
+      ...(monacoEditorPlugin as any).default({}),
+      // Keep worker bundling; initialization is an external same-origin script.
+      transformIndexHtml: () => [],
+    }
   ],
   server: {
     proxy: {

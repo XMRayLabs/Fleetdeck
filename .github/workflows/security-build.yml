@@ -27,6 +27,8 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: node scripts/smoke-frontend.cjs
       - run: npm audit --omit=dev --workspaces --audit-level=high
 
   publish:
