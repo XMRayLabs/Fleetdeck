@@ -29,6 +29,12 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: node scripts/smoke-frontend.cjs
+      - name: Install Nginx for production proxy integration tests
+        run: sudo apt-get update && sudo apt-get install -y nginx
+      - name: Test real login and language persistence through Nginx
+        run: node scripts/smoke-auth.cjs
+        env:
+          NGINX_BIN: /usr/sbin/nginx
       - run: npm audit --omit=dev --workspaces --audit-level=high
 
   publish:

@@ -86,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'; 
+import { computed, onMounted, ref } from 'vue';
 import { useAuthStore } from '../stores/auth.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useAppearanceStore } from '../stores/appearance.store'; 
@@ -112,7 +112,7 @@ const { t } = useI18n();
 const { isUpdateAvailable, checkLatestVersion } = useVersionCheck();
 
 // Define tabs for settings sections
-const tabs = ref([
+const tabs = computed(() => [
   { key: 'workspace', label: t('settings.tabs.workspace', '工作区') },
   { key: 'system', label: t('settings.tabs.system', '系统') },
   { key: 'security', label: t('settings.tabs.security', '安全') },

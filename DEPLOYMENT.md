@@ -51,6 +51,22 @@ Compose 只发布 `${WEB_PORT}`。不要额外发布 3001、8080、9090 或 4822
 
 让 Caddy、Traefik 或 Nginx 把公网 HTTPS 请求代理到 `127.0.0.1:18111`，保留 `Host`、`X-Forwarded-For`、`X-Forwarded-Proto` 和 WebSocket Upgrade 头。建议在最外层 TLS 代理启用 HSTS。
 
+最外层 TLS 代理必须覆盖客户端传入的协议头，不能直接信任或追加它。Nginx 的 HTTPS 站点示例：
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:18111;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+```
+
+容器内的 Nginx 会保留外层传来的 `https`，避免 HTTP 内部链路阻止后端下发 Secure 会话 Cookie。Web 端口应通过防火墙限制为仅可信反向代理可访问。若登录后立即返回登录页，检查协议头和浏览器是否收到会话 Cookie；不要通过关闭正式环境的 Secure Cookie 来绕过问题。
+
 如果只在可信内网临时使用 HTTP，可设置 `COOKIE_SECURE=false`；不要把这种配置暴露到互联网。
 
 ## 5. 备份

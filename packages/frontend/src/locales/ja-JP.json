@@ -613,6 +613,8 @@
         "verifyButton": "検証"
     },
     "nav": {
+        "orchestration": "一括ジョブ",
+        "playbooks": "プレイブック",
         "auditLogs": "監査ログ",
         "customizeStyle": "外観のカスタマイズ",
         "dashboard": "ダッシュボード",
@@ -757,6 +759,15 @@
         }
     },
     "settings": {
+        "tabs": {
+            "workspace": "ワークスペース",
+            "system": "システム",
+            "security": "セキュリティ",
+            "ipControl": "IP 制御",
+            "dataManagement": "データ管理",
+            "appearance": "外観",
+            "about": "このアプリについて"
+        },
         "popupFileManager": {
       "title": "ポップアップファイルマネージャー",
       "enableLabel": "ポップアップファイルマネージャーを有効にする",

@@ -3,6 +3,8 @@
   "projectName": "FleetDeck",
   "slogan":"Stir the stars, command the terminal.",
   "nav": {
+    "orchestration": "Batch Jobs",
+    "playbooks": "Playbooks",
     "dashboard": "Dashboard",
     "terminal": "Terminal",
     "connections": "Connections",

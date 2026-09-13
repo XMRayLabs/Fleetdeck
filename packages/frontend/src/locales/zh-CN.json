@@ -3,6 +3,8 @@
   "projectName": "星枢终端",
   "slogan": "星垂平野阔，枢动万端通",
   "nav": {
+    "orchestration": "批量任务",
+    "playbooks": "自动化剧本",
     "dashboard": "仪表盘",
     "terminal": "终端",
     "connections": "连接管理",
