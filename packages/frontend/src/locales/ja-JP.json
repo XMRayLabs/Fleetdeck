@@ -1,6 +1,7 @@
 {
+  "ui": {"console":"運用コンソール","navigation":"メインナビゲーション","appearance":"外観","pages":{"Workspace":"サーバーに接続してターミナルセッションを管理します。","Proxies":"サーバー接続に使用するプロキシを設定します。","Orchestration":"対象を選択してコマンドやファイルを配信し、結果を確認します。","Playbooks":"コマンド、ファイル、変数を再利用可能な手順にまとめます。","Notifications":"運用イベントとアラートの通知方法を設定します。","AuditLogs":"アクセス履歴と設定変更を確認します。","Connections":"サーバー接続、認証情報、グループを一元管理します。","Settings":"ワークスペース、セキュリティ、外観を設定します。","Dashboard":"サーバーの概要を確認し、接続して作業を続けます。"}},
 
-    "appName": "星枢ターミナル",
+    "appName": "FleetDeck",
     "auditLog": {
         "actions": {
             "2FA_DISABLED": "2段階認証無効",
@@ -643,7 +644,7 @@
         "testMessageSaved": "設定 ID {id} ({name}) のテストがトリガーされました",
         "testMessageUnsaved": "未保存の {channelType} 設定のテストがトリガーされました"
     },
-    "projectName": "星枢ターミナル",
+    "projectName": "FleetDeck",
     "proxies": {
         "actions": {
             "delete": "削除",
@@ -1201,7 +1202,7 @@
         "username": "ユーザー名",
         "usernamePlaceholder": "ユーザー名を入力"
     },
-    "slogan": "星垂平野闊，枢動万端通",
+    "slogan": "安全な接続、一貫した運用。",
     "statusMonitor": {
         "bytesPerSecond": "B/秒",
         "cpuLabel": "CPU:",

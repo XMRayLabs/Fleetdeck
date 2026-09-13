@@ -285,13 +285,17 @@ const handleConnectionModified = async () => {
 
 <template>
   <div class="p-4 md:p-6 lg:p-8 bg-background text-foreground">
-    <h1 class="text-2xl font-semibold mb-6">{{ t('nav.dashboard') }}</h1>
+    <section class="fd-overview-grid">
+      <article><i class="fas fa-server" aria-hidden="true"></i><div><strong>{{ connections.length }}</strong><span>{{ t('nav.connections') }}</span></div></article>
+      <article><i class="fas fa-terminal" aria-hidden="true"></i><div><strong>{{ connections.filter(c => c.type === 'SSH').length }}</strong><span>SSH</span></div></article>
+      <article><i class="fas fa-tags" aria-hidden="true"></i><div><strong>{{ tags.length }}</strong><span>{{ t('dashboard.filterTags.all') }}</span></div></article>
+    </section>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:items-start">
 
       <!-- Connection List -->
       <div class="bg-card text-card-foreground shadow rounded-lg overflow-hidden border border-border min-h-[400px]">
-        <div class="px-4 py-3 border-b border-border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div class="fd-resource-toolbar border-b border-border">
           <h2 class="text-lg font-medium flex-shrink-0">{{ t('dashboard.connectionList', '连接列表') }} ({{ filteredAndSortedConnections.length }})</h2>
           <div class="w-full sm:w-auto flex flex-wrap sm:flex-nowrap items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
             <!-- Search Input (Order adjusted for button placement) -->

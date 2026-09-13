@@ -44,10 +44,6 @@ const closeForm = () => {
 <template>
   <div class="p-4 bg-background text-foreground"> <!-- Outer container with padding -->
     <div class="max-w-6xl mx-auto"> <!-- Inner container for max-width and centering -->
-      <h2 class="text-xl font-semibold text-foreground mb-4 pb-2 border-b border-border"> <!-- Title styling consistent with Notifications -->
-        {{ t('proxies.title') }}
-      </h2>
-
       <button
         @click="openAddForm"
         v-if="!showForm"

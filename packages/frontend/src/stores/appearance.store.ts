@@ -48,7 +48,18 @@ export const useAppearanceStore = defineStore('appearance', () => {
     // 移除 availableTerminalThemes 计算属性，直接使用 allTerminalThemes
     // 当前应用的 UI 主题 (CSS 变量对象)
     const currentUiTheme = computed<Record<string, string>>(() => {
-        return safeJsonParse(appearanceSettings.value.customUiTheme, defaultUiTheme);
+        const theme = safeJsonParse(appearanceSettings.value.customUiTheme, defaultUiTheme);
+        // Upgrade only the untouched legacy stock palette; retain custom themes.
+        const legacyTheme: Record<string, string> = {
+            ...defaultUiTheme,
+            '--text-color': '#333333', '--text-color-secondary': '#666666', '--border-color': '#cccccc',
+            '--link-color': '#8E44AD', '--link-hover-color': '#B180E0', '--link-active-color': '#A06CD5',
+            '--link-active-bg-color': '#F3EBFB', '--header-bg-color': '#f0f0f0', '--footer-bg-color': '#f0f0f0',
+            '--button-bg-color': '#A06CD5', '--button-hover-bg-color': '#8E44AD', '--font-family-sans-serif': 'sans-serif',
+        };
+        const legacy = Object.keys(theme).length === Object.keys(legacyTheme).length
+            && Object.entries(theme).every(([key, value]) => legacyTheme[key] === value);
+        return legacy ? { ...theme, ...defaultUiTheme } : theme;
     });
 
     // 当前激活的终端主题 ID

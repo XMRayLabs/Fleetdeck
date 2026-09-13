@@ -44,7 +44,8 @@ const formatTimestamp = (timestamp: number | null): string => {
     <div v-else-if="error" class="p-4 mb-4 border-l-4 border-error bg-error/10 text-error rounded"> <!-- Error state consistent with Notifications -->
       {{ t('proxies.error', { error: error }) }}
     </div>
-    <div v-else-if="proxies.length === 0" class="p-4 mb-4 border-l-4 border-blue-400 bg-blue-100 text-blue-700 rounded"> <!-- No proxies state consistent with Notifications (using blue for now) -->
+    <div v-else-if="proxies.length === 0" class="fd-empty-state">
+      <i class="fas fa-route" aria-hidden="true"></i>
       {{ t('proxies.noProxies') }}
     </div>
 

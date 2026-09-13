@@ -2,6 +2,11 @@
 
 /* Tailwind Theme Variables Mapping */
 @theme inline {
+  --color-card: var(--fd-surface);
+  --color-card-foreground: var(--text-color);
+  --color-muted: var(--fd-subtle);
+  --color-muted-foreground: var(--text-color-secondary);
+  --color-primary-dark: var(--button-hover-bg-color);
   /* Base Colors */
   --color-background: var(--app-bg-color); /* More generic name */
   --color-foreground: var(--text-color); /* More generic name */

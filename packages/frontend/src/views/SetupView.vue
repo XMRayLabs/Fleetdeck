@@ -1,6 +1,6 @@
 <template>
   <!-- Page Container with Subtle Dot Background -->
-  <div class="flex items-center justify-center min-h-screen bg-background p-4 bg-[radial-gradient(theme(colors.border)_1px,transparent_1px)] bg-[size:16px_16px]">
+  <div class="fd-auth flex items-center justify-center min-h-screen bg-background p-4 bg-[radial-gradient(theme(colors.border)_1px,transparent_1px)] bg-[size:16px_16px]">
     <!-- Setup Card -->
     <div class="flex w-full max-w-5xl rounded-3xl shadow-2xl overflow-hidden bg-background/95 border border-border backdrop-blur-xl">
       <!-- Left Panel (Brand) - Hidden on small screens -->

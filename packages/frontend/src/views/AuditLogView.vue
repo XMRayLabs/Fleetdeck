@@ -1,10 +1,6 @@
 <template>
   <div class="p-4 bg-background text-foreground"> <!-- Outer container with padding -->
     <div class="max-w-7xl mx-auto"> <!-- Inner container for max-width (slightly wider for table) and centering -->
-      <h1 class="text-xl font-semibold text-foreground mb-4 pb-2 border-b border-border"> <!-- Title styling -->
-        {{ $t('auditLog.title') }}
-      </h1>
-
       <!-- Filtering Controls -->
       <div class="flex flex-wrap items-center gap-4 mb-4 p-4 border border-border rounded-lg bg-header/50">
         <div class="flex-grow min-w-[200px]">

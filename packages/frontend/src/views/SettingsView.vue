@@ -2,7 +2,7 @@
   <div class="p-4 bg-background text-foreground min-h-screen"> <!-- Outer container -->
     <div class="max-w-7xl mx-auto"> <!-- Inner container for max-width -->
       <!-- Tabs Navigation -->
-      <div class="mb-6 flex space-x-1 bg-background z-10 py-2">
+      <div class="fd-settings-tabs">
         <button
           v-for="tab in tabs"
           :key="tab.key"

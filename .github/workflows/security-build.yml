@@ -35,6 +35,7 @@ jobs:
         run: node scripts/smoke-auth.cjs
         env:
           NGINX_BIN: /usr/sbin/nginx
+          UI_SCREENSHOT_DIR: .artifacts/ui
       - run: npm audit --omit=dev --workspaces --audit-level=high
 
   publish:

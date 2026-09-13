@@ -135,6 +135,47 @@ const proxy = (req, res, port, headers) => {
     assert.equal(await page.evaluate(() => localStorage.getItem('user-locale')), locale);
     console.log(`PASS real settings: ${locale} saved to database and retained after reload`);
   }
+  if (process.env.UI_SCREENSHOT_DIR) {
+    const directory = path.resolve(process.env.UI_SCREENSHOT_DIR);
+    fs.mkdirSync(directory, { recursive: true });
+    // Documentation-only addresses: create records in the disposable database,
+    // never connect to or execute commands on these example targets.
+    for (const [index, name] of ['edge-gateway-01', 'production-api-01', 'production-api-02', 'database-primary', 'staging-runner', 'windows-admin'].entries()) {
+      const result = await context.request.post(origin + '/api/v1/connections', { data: {
+        name, type: index === 5 ? 'RDP' : 'SSH', host: `192.0.2.${index + 10}`,
+        port: index === 5 ? 3389 : 22, username: 'operator', auth_method: 'password', credential_mode: 'prompt',
+      } });
+      assert.ok(result.ok(), 'Create isolated UI test connection');
+    }
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 960 });
+      for (const route of ['/', '/connections', '/orchestration', '/playbooks', '/proxies', '/notifications', '/audit-logs', '/settings', '/workspace']) {
+        await page.goto(origin + route, { waitUntil: 'networkidle' });
+        assert.equal(page.url(), origin + route);
+        await page.screenshot({ path: path.join(directory, `${width}-${route.slice(1) || 'dashboard'}.png`), fullPage: true });
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2);
+        console.log(`UI ${width} ${route}: horizontal overflow=${overflow}`);
+        assert.ok(!overflow, `Page must fit viewport: ${width} ${route}`);
+        if (width === 390 && route === '/') {
+          await page.getByRole('button', { name: 'Main navigation', exact: true }).click();
+          await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Connections', exact: true }).click();
+          await page.waitForURL(origin + '/connections');
+          console.log('PASS mobile navigation: opens, navigates, and closes');
+        }
+        await delay(1000); // Avoid testing with an unrealistic burst of navigation requests.
+      }
+      await page.goto(origin + '/playbooks', { waitUntil: 'networkidle' });
+      await page.locator('.hero-actions button').last().click();
+      await page.locator('.drawer').waitFor({ state: 'visible' });
+      await page.screenshot({ path: path.join(directory, `${width}-playbook-editor.png`), fullPage: true });
+    }
+    await page.setViewportSize({ width: 1440, height: 960 });
+    await page.goto(origin + '/orchestration', { waitUntil: 'networkidle' });
+    await page.evaluate(() => {
+      for (const [key, value] of Object.entries({ '--app-bg-color': '#111827', '--text-color': '#e2e8f0', '--text-color-secondary': '#94a3b8', '--border-color': '#334155', '--header-bg-color': '#1e293b' })) document.documentElement.style.setProperty(key, value);
+    });
+    await page.screenshot({ path: path.join(directory, '1440-dark-orchestration.png'), fullPage: true });
+  }
   assert.deepEqual(errors, []);
 })().catch(error => { console.error(error); console.error(backendLog); process.exitCode = 1; }).finally(async () => {
   if (browser) await browser.close();

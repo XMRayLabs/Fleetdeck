@@ -1,0 +1,25 @@
+# FleetDeck UI conventions
+
+## Layout
+
+- A 232 px navigation rail and 64 px context bar frame management pages. The terminal workbench keeps its full-width split-pane layout.
+- Use `ConsolePageHeader` for the page title and purpose. Do not add a second page-level title inside a feature.
+- Management content shares a 1440 px maximum width, 32 px desktop gutters and 16 px mobile gutters.
+- Toolbars wrap their controls. Tables scroll inside their containers; the page must not overflow horizontally.
+- Settings are grouped into responsive cards. Preserve the existing explicit save actions.
+
+## Tokens and components
+
+`src/design-system.css` defines shared surfaces, borders, spacing and legacy component adapters. `style.css` maps Tailwind utilities to the same variables. Frontend and backend default palettes must stay synchronized.
+
+Use `--fd-surface`, `--fd-canvas`, `--fd-line`, `--fd-subtle`, and the appearance system's primary/text variables rather than separate hardcoded feature palettes. Use sans-serif UI typography; monospace belongs in commands and output. Terminal colors remain independent.
+
+Primary actions use the accent color; secondary actions use a bordered surface. Cards use 12 px radii, fields/buttons 7 px radii, and restrained shadows. Keep keyboard focus visible and respect reduced-motion preferences.
+
+The exact legacy stock palette is upgraded in memory. Custom palettes are retained, and no user appearance data is overwritten during upgrade.
+
+## Verification
+
+After `npm run build`, run `node scripts/smoke-frontend.cjs` and `node scripts/smoke-auth.cjs`. The latter uses a disposable database and random test credentials; it never connects to sample servers.
+
+Set `UI_SCREENSHOT_DIR=.artifacts/ui` for desktop/mobile route checks, populated server-list screenshots, a playbook editor screenshot and a dark palette check. CI additionally sets `NGINX_BIN=/usr/sbin/nginx` to test the shipped production proxy configuration. Screenshots are test evidence, not a guarantee that live SSH/RDP/VNC sessions were exercised.

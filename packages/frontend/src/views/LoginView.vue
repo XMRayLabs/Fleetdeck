@@ -147,7 +147,7 @@ const handlePasskeyLogin = async () => {
 </script>
 <template>
   <!-- Page Container -->
-  <div class="flex items-center justify-center min-h-screen bg-background p-4 bg-[radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--color-primary)_15%,transparent),transparent_35%)]">
+  <div class="fd-auth flex items-center justify-center min-h-screen bg-background p-4 bg-[radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--color-primary)_15%,transparent),transparent_35%)]">
     <!-- Login Card -->
     <div class="flex w-full max-w-5xl rounded-3xl shadow-2xl overflow-hidden bg-background/95 border border-border backdrop-blur-xl">
       <!-- Left Panel (Brand) - Hidden on small screens -->

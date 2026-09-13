@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RouterLink, RouterView, useRoute } from 'vue-router';
+import ConsolePageHeader from './components/ConsolePageHeader.vue';
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from './stores/auth.store';
@@ -118,7 +119,10 @@ const navigationItems = computed(() => [
   { to: '/settings', label: t('nav.settings'), icon: 'fa-solid fa-gear' },
 ]);
 
+const currentPageTitle = computed(() => navigationItems.value.find(item => item.to === route.path)?.label || t('nav.terminal'));
+
 watch(route, () => {
+  mobileMenuOpen.value = false;
   updateUnderline();
 }, { immediate: true }); // *** 确保 immediate: true 存在 ***
 
@@ -289,58 +293,41 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
 
 <template>
   <div id="app-container" class="min-h-screen bg-background text-foreground">
-    <aside v-if="showDesktopSidebar" class="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-border bg-header/95 p-4 backdrop-blur-xl lg:flex lg:flex-col">
-      <RouterLink to="/" class="flex items-center gap-3 rounded-2xl px-2 py-3 text-foreground no-underline">
-        <span class="grid h-10 w-10 place-items-center rounded-xl bg-primary text-lg font-black text-white shadow-lg shadow-primary/20">FD</span>
-        <span><strong class="block tracking-tight">FleetDeck</strong><small class="text-text-secondary">Server operations</small></span>
-      </RouterLink>
-      <nav class="mt-7 flex flex-1 flex-col gap-1 overflow-y-auto" aria-label="主导航">
-        <RouterLink
-          v-for="item in navigationItems"
-          :key="item.to"
-          :to="item.to"
-          class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-text-secondary no-underline transition hover:bg-nav-active-bg hover:text-foreground"
-          active-class="bg-primary/10 !text-primary"
-        >
-          <i :class="[item.icon, 'w-5 text-center opacity-80 group-hover:opacity-100']"></i>
-          <span>{{ item.label }}</span>
-        </RouterLink>
+    <aside v-if="showDesktopSidebar" class="fd-sidebar fixed inset-y-0 left-0 z-30 hidden lg:flex lg:flex-col">
+      <RouterLink to="/" class="fd-brand"><span class="fd-brand-mark">FD</span><span><strong>FleetDeck</strong><small>{{ t('ui.console') }}</small></span></RouterLink>
+      <nav class="fd-nav" :aria-label="t('ui.navigation')">
+        <RouterLink v-for="item in navigationItems" :key="item.to" :to="item.to"><i :class="item.icon" aria-hidden="true"></i><span>{{ item.label }}</span></RouterLink>
       </nav>
-      <div class="mt-4 grid grid-cols-2 gap-2 border-t border-border pt-4">
-        <button class="rounded-xl border border-border px-3 py-2 text-sm text-text-secondary transition hover:border-primary hover:text-primary" @click="openStyleCustomizer"><i class="fa-solid fa-palette mr-2"></i>主题</button>
-        <button class="rounded-xl border border-border px-3 py-2 text-sm text-text-secondary transition hover:border-error hover:text-error" @click="handleLogout"><i class="fa-solid fa-arrow-right-from-bracket mr-2"></i>退出</button>
+      <div class="fd-sidebar-footer">
+        <button @click="openStyleCustomizer"><i class="fa-solid fa-palette mr-2" aria-hidden="true"></i>{{ t('ui.appearance') }}</button>
+        <button @click="handleLogout"><i class="fa-solid fa-arrow-right-from-bracket mr-2" aria-hidden="true"></i>{{ t('nav.logout') }}</button>
       </div>
     </aside>
-
-    <header v-if="showAppShell" :class="['sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border bg-header/90 px-4 backdrop-blur-xl lg:px-6', { 'lg:ml-64': showDesktopSidebar }]">
+    <header v-if="showAppShell" :class="['fd-topbar sticky top-0 z-20 flex items-center justify-between', { 'fd-offset': showDesktopSidebar }]">
       <div class="flex items-center gap-3">
-        <button v-if="!isWorkspaceRoute" class="grid h-10 w-10 place-items-center rounded-xl border border-border lg:hidden" aria-label="打开导航" @click="mobileMenuOpen = !mobileMenuOpen"><i class="fa-solid fa-bars"></i></button>
-        <RouterLink to="/" class="flex items-center gap-2 text-foreground no-underline lg:hidden">
-          <span class="grid h-9 w-9 place-items-center rounded-xl bg-primary text-xs font-black text-white">FD</span>
-          <strong>FleetDeck</strong>
-        </RouterLink>
-        <span v-if="isWorkspaceRoute" class="hidden text-sm font-medium text-text-secondary sm:inline"><i class="fa-solid fa-terminal mr-2 text-primary"></i>{{ t('nav.terminal') }}</span>
+        <button v-if="!isWorkspaceRoute" class="fd-icon-button lg:hidden" :aria-label="t('ui.navigation')" :aria-expanded="mobileMenuOpen" @click="mobileMenuOpen = !mobileMenuOpen"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
+        <div class="fd-breadcrumb"><RouterLink to="/">FleetDeck</RouterLink><span>/</span><strong>{{ currentPageTitle }}</strong></div>
       </div>
       <div class="flex items-center gap-2">
-        <button class="grid h-10 w-10 place-items-center rounded-xl text-text-secondary transition hover:bg-nav-active-bg hover:text-primary" :title="t('nav.customizeStyle')" @click="openStyleCustomizer"><i class="fa-solid fa-palette"></i></button>
-        <button class="hidden rounded-xl border border-border px-3 py-2 text-sm text-text-secondary transition hover:text-error sm:block lg:hidden" @click="handleLogout">{{ t('nav.logout') }}</button>
+        <RouterLink to="/settings" class="fd-icon-button" :aria-label="t('nav.settings')" :title="t('nav.settings')"><i class="fa-solid fa-gear" aria-hidden="true"></i></RouterLink>
+        <button class="fd-icon-button" :aria-label="t('nav.customizeStyle')" :title="t('nav.customizeStyle')" @click="openStyleCustomizer"><i class="fa-solid fa-palette" aria-hidden="true"></i></button>
+        <div class="fd-account"><i class="fa-solid fa-user" aria-hidden="true"></i><span>{{ authStore.loggedInUser }}</span></div>
       </div>
     </header>
-
-    <div v-if="mobileMenuOpen && showDesktopSidebar" class="fixed inset-0 z-40 bg-black/45 lg:hidden" @click.self="mobileMenuOpen = false">
-      <nav class="h-full w-72 border-r border-border bg-header p-4 shadow-2xl">
-        <div class="mb-5 flex items-center justify-between"><strong class="text-lg">FleetDeck</strong><button class="h-10 w-10 rounded-xl hover:bg-nav-active-bg" @click="mobileMenuOpen = false"><i class="fa-solid fa-xmark"></i></button></div>
-        <RouterLink v-for="item in navigationItems" :key="item.to" :to="item.to" class="mb-1 flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-text-secondary no-underline" active-class="bg-primary/10 !text-primary" @click="mobileMenuOpen = false"><i :class="[item.icon, 'w-5 text-center']"></i>{{ item.label }}</RouterLink>
+    <div v-if="mobileMenuOpen && showDesktopSidebar" class="fixed inset-0 z-40 bg-black/45 lg:hidden" @click.self="mobileMenuOpen = false" @keydown.esc="mobileMenuOpen = false">
+      <nav class="fd-sidebar flex h-full flex-col" :aria-label="t('ui.navigation')">
+        <div class="flex items-center justify-between mb-6"><strong>FleetDeck</strong><button class="h-9 w-9" :aria-label="t('common.close')" @click="mobileMenuOpen = false"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="fd-nav"><RouterLink v-for="item in navigationItems" :key="item.to" :to="item.to" @click="mobileMenuOpen = false"><i :class="item.icon" aria-hidden="true"></i>{{ item.label }}</RouterLink></div>
+        <div class="fd-sidebar-footer"><button @click="handleLogout">{{ t('nav.logout') }}</button></div>
       </nav>
     </div>
-
-    <main :class="{ 'lg:pl-64': showDesktopSidebar }">
-      <!-- 使用 KeepAlive 包裹 RouterView，并指定缓存 WorkspaceView -->
-      <RouterView v-slot="{ Component }">
-        <KeepAlive :include="['WorkspaceView', 'ConnectionsView']">
-          <component :is="Component" />
-        </KeepAlive>
-      </RouterView>
+    <main :class="['fd-console', { 'fd-main-offset': showDesktopSidebar }]">
+      <ConsolePageHeader v-if="showDesktopSidebar" :title="currentPageTitle" :description="t(`ui.pages.${String(route.name)}`)" />
+      <div :class="{ 'fd-page-content': showDesktopSidebar }">
+        <RouterView v-slot="{ Component }">
+          <KeepAlive :include="['WorkspaceView', 'ConnectionsView']"><component :is="Component" /></KeepAlive>
+        </RouterView>
+      </div>
     </main>
 
     <UINotificationDisplay />

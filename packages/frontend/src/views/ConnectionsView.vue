@@ -486,10 +486,9 @@ const handleConnectAllFilteredConnections = async () => {
 <template>
   <div class="p-4 md:p-6 lg:p-8 bg-background text-foreground"> <!-- 最外层，负责背景和整体内边距 -->
     <div class="max-w-screen-lg mx-auto"> <!-- 将 xl 修改为 lg -->
-      <h1 class="text-2xl font-semibold mb-6">{{ t('nav.connections', '连接管理') }}</h1>
 
       <div class="bg-card text-card-foreground shadow rounded-lg overflow-hidden border border-border min-h-[400px]"> <!-- 移除了 max-w-screen-2xl mx-auto -->
-        <div class="px-4 py-3 border-b border-border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div class="fd-resource-toolbar border-b border-border">
         <h2 class="text-lg font-medium flex-shrink-0">{{ t('dashboard.connectionList', '连接列表') }} ({{ filteredAndSortedConnections.length }})</h2>
         <div class="w-full sm:w-auto flex flex-wrap sm:flex-nowrap items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
           <!-- Batch Edit Toggle -->

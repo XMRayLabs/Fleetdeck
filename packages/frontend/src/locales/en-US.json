@@ -1,7 +1,8 @@
 {
+  "ui": {"console":"Operations console","navigation":"Main navigation","appearance":"Appearance","pages":{"Workspace":"Connect to your servers and keep your sessions organized.","Proxies":"Configure reusable proxy routes for your server connections.","Orchestration":"Select targets, run commands or distribute files, and track every result.","Playbooks":"Build repeatable workflows with commands, files and reusable variables.","Notifications":"Choose how you receive operational events and alerts.","AuditLogs":"Review access and configuration changes across your fleet.","Connections":"Manage server connections, credentials and groups in one place.","Settings":"Manage workspace preferences, security and appearance.","Dashboard":"Your server fleet at a glance. Connect, monitor and continue your work."}},
   "appName": "FleetDeck",
   "projectName": "FleetDeck",
-  "slogan":"Stir the stars, command the terminal.",
+  "slogan":"Connect securely. Operate consistently.",
   "nav": {
     "orchestration": "Batch Jobs",
     "playbooks": "Playbooks",
