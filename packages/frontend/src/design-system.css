@@ -123,7 +123,7 @@
 @media(max-width:767px) {
   .fd-overview-grid { gap:8px; }
   .fd-overview-grid article { padding:12px; gap:8px; flex-direction:column; align-items:flex-start; }
-  .fd-overview-grid i { display:none; }
+  .fd-overview-grid i { width:32px; height:32px; }
   #app-container .fd-page-content :has(> .settings-section-content) { grid-template-columns:minmax(0,1fr); padding:12px; }
   .fd-topbar { padding:0 16px; height:58px; }
   .fd-page-heading { padding:24px 16px 18px; }
@@ -137,3 +137,56 @@
   #app-container .fd-page-content .filters { grid-template-columns:1fr; }
 }
 @media(prefers-reduced-motion:reduce) { #app-container *,#app-container *::before,#app-container *::after { scroll-behavior:auto !important; transition:none !important; animation:none !important; } }
+
+/* Workspace chrome follows the console; terminal and editor canvases remain independent. */
+#app-container .workspace-view { height:100dvh; min-height:0; background:var(--fd-canvas); }
+#app-container .workspace-view.with-header { height:calc(100dvh - 64px); }
+#app-container .fd-terminal-tabs { flex-shrink:0; min-height:48px; margin:16px 16px 0; border:1px solid var(--fd-line); border-radius:10px 10px 0 0; background:var(--fd-surface); }
+.fd-terminal-tabs button { gap:8px; color:var(--text-color-secondary); }
+.fd-terminal-tabs button i { color:inherit; }
+.fd-tab-action-label { font-size:12px; white-space:nowrap; }
+#app-container .workspace-view .main-content-area { margin:0 16px 16px; border:1px solid var(--fd-line); border-top:0; border-radius:0 0 10px 10px; min-height:0; }
+.fd-workspace-welcome { flex:1; min-height:0; overflow:auto; margin:0 16px 16px; padding:40px 28px; border:1px solid var(--fd-line); border-top:0; border-radius:0 0 10px 10px; background:var(--fd-surface); }
+.fd-workspace-intro { max-width:600px; margin:0 auto; text-align:center; padding:24px 0 36px; }
+.fd-workspace-symbol { display:inline-grid; place-items:center; width:56px; height:56px; background:var(--fd-accent-soft); border-radius:14px; color:var(--link-active-color); font-size:24px; margin-bottom:18px; }
+.fd-workspace-symbol i { color:inherit; }
+.fd-workspace-intro h1 { font-size:26px; font-weight:650; letter-spacing:-.6px; margin:0 0 10px; }
+.fd-workspace-intro p { color:var(--text-color-secondary); font-size:14px; line-height:1.7; }
+.fd-workspace-actions { display:flex; justify-content:center; flex-wrap:wrap; gap:10px; margin-top:24px; }
+.fd-workspace-actions :is(a,button) { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 16px; border:1px solid var(--fd-line); border-radius:7px; font-size:13px; font-weight:600; background:var(--fd-surface); }
+.fd-workspace-actions .fd-workspace-primary { background:var(--button-bg-color); border-color:var(--button-bg-color); color:var(--button-text-color); }
+.fd-workspace-actions i { color:inherit; }
+.fd-open-panels { margin-top:18px; color:var(--text-color-secondary); font-size:12px; }
+.fd-open-panels:hover { color:var(--link-active-color); }
+.fd-open-panels i { color:inherit; margin-left:6px; }
+#app-container .fd-pane-heading { min-height:34px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:7px 12px; background:var(--fd-subtle); border-bottom:1px solid var(--fd-line); color:var(--text-color-secondary); font-size:11px; font-weight:600; }
+.fd-pane-heading i { color:inherit; }
+#app-container .workspace-view .bg-header:has(>div>.fa-plug) { background:var(--fd-surface); }
+#app-container .workspace-view .fa-plug { font-size:24px; color:var(--text-color-secondary); }
+#app-container .workspace-view .fa-plug + span { font-size:14px; }
+#app-container .workspace-view div:has(>.fa-plug) { padding:12px; }
+#app-container .workspace-view .file-editor-tabs:has(>.no-tabs-placeholder) { display:none; }
+.fd-workspace-shortcuts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; max-width:800px; margin:0 auto; }
+.fd-workspace-shortcuts a { display:grid; grid-template-columns:24px 1fr 16px; gap:8px 12px; padding:20px; border:1px solid var(--fd-line); border-radius:10px; }
+.fd-workspace-shortcuts a:hover { background:var(--fd-subtle); border-color:var(--link-active-color); }
+.fd-workspace-shortcuts strong { font-size:14px; }
+.fd-workspace-shortcuts span { grid-column:2; color:var(--text-color-secondary); font-size:12px; line-height:1.6; }
+.fd-workspace-shortcuts i:last-child { grid-column:3; grid-row:1; font-size:12px; align-self:center; }
+#app-container .workspace-view :is(.file-editor-container,.editor-header,.file-editor-tabs) { background:var(--fd-surface); color:var(--text-color); border-color:var(--fd-line); }
+#app-container .workspace-view :is(.editor-placeholder,.editor-loading,.editor-header-placeholder) { color:var(--text-color-secondary); font-size:13px; }
+#app-container .workspace-view :is(.editor-header,.file-editor-tabs) { min-height:38px; font-size:12px; }
+#app-container .workspace-view .file-editor-tabs .tab-item { background:var(--fd-subtle); color:var(--text-color-secondary); border-color:var(--fd-line); }
+#app-container .workspace-view .file-editor-tabs .tab-item.active { background:var(--fd-surface); color:var(--text-color); border-bottom-color:var(--link-active-color); }
+#app-container .workspace-view .file-editor-tabs :is(.close-tab-btn,.modified-indicator) { color:inherit; }
+#app-container .workspace-view .encoding-select { background:var(--fd-subtle); color:var(--text-color); border-color:var(--fd-line); border-radius:6px; }
+#app-container .workspace-view .save-btn { background:var(--button-bg-color); color:var(--button-text-color); border-radius:6px; }
+#app-container .workspace-view :is(.bg-header,.bg-sidebar) { background-color:var(--fd-subtle); }
+#app-container .workspace-view :is(input:not([type=checkbox]),select,textarea) { border-radius:7px; }
+@media(max-width:767px) {
+  #app-container .workspace-view.with-header { height:calc(100dvh - 58px); }
+  #app-container .fd-terminal-tabs { margin:8px 8px 0; min-height:44px; }
+  .fd-tab-action-label { display:none; }
+  .fd-workspace-welcome { margin:0 8px 8px; padding:20px 16px; }
+  .fd-workspace-intro { padding:12px 0 24px; }
+  .fd-workspace-shortcuts { grid-template-columns:1fr; }
+}

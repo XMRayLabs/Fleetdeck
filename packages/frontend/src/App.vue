@@ -106,7 +106,7 @@ onUnmounted(() => {
 // *** 计算属性，判断是否在 workspace 路由 ***
 const isWorkspaceRoute = computed(() => route.path === '/workspace');
 const showAppShell = computed(() => isAuthenticated.value && (!isWorkspaceRoute.value || isHeaderVisible.value));
-const showDesktopSidebar = computed(() => showAppShell.value && !isWorkspaceRoute.value);
+const showDesktopSidebar = computed(() => showAppShell.value);
 const navigationItems = computed(() => [
   { to: '/', label: t('nav.dashboard'), icon: 'fa-solid fa-chart-pie' },
   { to: '/workspace', label: t('nav.terminal'), icon: 'fa-solid fa-terminal' },
@@ -305,7 +305,7 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
     </aside>
     <header v-if="showAppShell" :class="['fd-topbar sticky top-0 z-20 flex items-center justify-between', { 'fd-offset': showDesktopSidebar }]">
       <div class="flex items-center gap-3">
-        <button v-if="!isWorkspaceRoute" class="fd-icon-button lg:hidden" :aria-label="t('ui.navigation')" :aria-expanded="mobileMenuOpen" @click="mobileMenuOpen = !mobileMenuOpen"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
+        <button class="fd-icon-button lg:hidden" :aria-label="t('ui.navigation')" :aria-expanded="mobileMenuOpen" @click="mobileMenuOpen = !mobileMenuOpen"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
         <div class="fd-breadcrumb"><RouterLink to="/">FleetDeck</RouterLink><span>/</span><strong>{{ currentPageTitle }}</strong></div>
       </div>
       <div class="flex items-center gap-2">
@@ -322,8 +322,8 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
       </nav>
     </div>
     <main :class="['fd-console', { 'fd-main-offset': showDesktopSidebar }]">
-      <ConsolePageHeader v-if="showDesktopSidebar" :title="currentPageTitle" :description="t(`ui.pages.${String(route.name)}`)" />
-      <div :class="{ 'fd-page-content': showDesktopSidebar }">
+      <ConsolePageHeader v-if="showDesktopSidebar && !isWorkspaceRoute" :title="currentPageTitle" :description="t(`ui.pages.${String(route.name)}`)" />
+      <div :class="{ 'fd-page-content': showDesktopSidebar && !isWorkspaceRoute }">
         <RouterView v-slot="{ Component }">
           <KeepAlive :include="['WorkspaceView', 'ConnectionsView']"><component :is="Component" /></KeepAlive>
         </RouterView>

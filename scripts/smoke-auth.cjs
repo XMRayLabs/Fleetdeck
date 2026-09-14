@@ -102,6 +102,8 @@ const proxy = (req, res, port, headers) => {
   browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
   const context = await browser.newContext({ locale: 'en-US', serviceWorkers: 'block' });
   const page = await context.newPage();
+  // Icons must still render when downloadable fonts are unavailable.
+  await page.route(/\.(woff2?|ttf|eot)(\?.*)?$/, route => route.abort());
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(origin + '/login');
@@ -117,6 +119,19 @@ const proxy = (req, res, port, headers) => {
   assert.equal(page.url(), origin + '/', 'Login must survive a full reload');
   assert.equal((await context.request.get(origin + '/api/v1/auth/status')).status(), 200);
   console.log('PASS real login: Secure cookie, authenticated dashboard, reload retains session');
+  const iconState = await page.evaluate(async () => {
+    await document.fonts.ready;
+    return [...document.querySelectorAll('.fd-overview-grid i')].map(icon => {
+      const css = getComputedStyle(icon, '::before');
+      return { mask: css.maskImage, width: css.width, height: css.height };
+    });
+  });
+  console.log('Checking bundled SVG icons with font downloads blocked');
+  assert.equal(iconState.length, 3);
+  for (const icon of iconState) {
+    assert.ok(icon.mask.includes('data:image/svg+xml'), 'Dashboard icon must use a bundled SVG');
+    assert.ok(parseFloat(icon.width) > 0 && parseFloat(icon.height) > 0, 'Icon must have visible dimensions');
+  }
   const locales = [ ['zh-CN', '系统'], ['ja-JP', 'システム'], ['en-US', 'System'] ];
   for (const [locale, systemLabel] of locales) {
     await page.goto(origin + '/settings', { waitUntil: 'networkidle' });
@@ -148,11 +163,37 @@ const proxy = (req, res, port, headers) => {
       assert.ok(result.ok(), 'Create isolated UI test connection');
     }
     for (const width of [1440, 390]) {
+      if (width === 390) await page.addInitScript(() => Object.defineProperty(navigator, 'userAgent', {
+        get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
+      }));
       await page.setViewportSize({ width, height: 960 });
       for (const route of ['/', '/connections', '/orchestration', '/playbooks', '/proxies', '/notifications', '/audit-logs', '/settings', '/workspace']) {
         await page.goto(origin + route, { waitUntil: 'networkidle' });
         assert.equal(page.url(), origin + route);
+        const missingIcons = await page.evaluate(() => [...document.querySelectorAll('.fas,.far,.fab,.fa-solid,.fa-regular,.fa-brands')]
+          .filter(icon => icon.getBoundingClientRect().width > 0 && getComputedStyle(icon, '::before').maskImage === 'none')
+          .map(icon => icon.className));
+        assert.deepEqual(missingIcons, [], `All visible icons must render: ${route}`);
+        if (route === '/workspace') {
+          if (width === 390) {
+            await page.getByRole('button', { name: 'Main navigation', exact: true }).click();
+            await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Terminal', exact: true }).click();
+          }
+          await page.locator('.fd-workspace-welcome').waitFor();
+          await page.locator('.fd-terminal-tabs button', { has: page.locator('.fa-plus') }).click();
+          await page.locator('.popup-connection-list').waitFor();
+          await page.locator('.fd-terminal-tabs > .fixed.inset-0').click({ position: { x: 2, y: 2 } });
+        }
         await page.screenshot({ path: path.join(directory, `${width}-${route.slice(1) || 'dashboard'}.png`), fullPage: true });
+        if (route === '/workspace' && width === 1440) {
+          await page.locator('.fd-open-panels').click();
+          await page.locator('.fd-pane-heading').first().waitFor();
+          await page.waitForLoadState('networkidle');
+          await page.screenshot({ path: path.join(directory, '1440-workspace-panels.png'), fullPage: true });
+          const missing = await page.evaluate(() => [...document.querySelectorAll('.workspace-view .fas,.workspace-view .far,.workspace-view .fab')]
+            .filter(icon => icon.getBoundingClientRect().width > 0 && getComputedStyle(icon, '::before').maskImage === 'none').map(icon => icon.className));
+          assert.deepEqual(missing, [], 'Workspace tools must have SVG icons');
+        }
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2);
         console.log(`UI ${width} ${route}: horizontal overflow=${overflow}`);
         assert.ok(!overflow, `Page must fit viewport: ${width} ${route}`);

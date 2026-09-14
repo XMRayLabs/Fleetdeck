@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import monacoEditorPlugin from 'vite-plugin-monaco-editor';
 import tailwindcss from '@tailwindcss/vite'
+import fleetdeckIcons from './icon-plugin.mjs';
 // https://vitejs.dev/config/
 export default defineConfig({
   define: {
@@ -9,6 +10,7 @@ export default defineConfig({
     __INTLIFY_JIT_COMPILATION__: true,
   },
   plugins: [
+    fleetdeckIcons(),
     vue(),
     tailwindcss(),
     // @ts-ignore because the plugin type might not perfectly match Vite's expected PluginOption type

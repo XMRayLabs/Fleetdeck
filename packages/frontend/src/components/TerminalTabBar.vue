@@ -411,7 +411,7 @@ onBeforeUnmount(() => {
 
 <template>
   <!-- +++ 使用 :class 绑定来条件化样式，包括高度 (修正 props 引用) +++ -->
-  <div :class="['flex bg-header border border-border overflow-hidden',
+  <div :class="['fd-terminal-tabs flex bg-header border border-border overflow-hidden',
                { 'rounded-t-md mx-2 mt-2': !props.isMobile }, // Desktop margins/rounding - Use props.isMobile
                props.isMobile ? 'h-8' : 'h-10' // Mobile height h-8, Desktop h-10 - Use props.isMobile
               ]">
@@ -460,6 +460,7 @@ onBeforeUnmount(() => {
       <button class="flex items-center justify-center px-3 h-full border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150 flex-shrink-0"
               @click="togglePopup" :title="$t('tabs.newTabTooltip')">
         <i class="fas fa-plus text-sm"></i>
+        <span class="fd-tab-action-label">{{ t('tabs.newTabTooltip') }}</span>
       </button>
     </div>
     <!-- Action Buttons -->
@@ -478,11 +479,13 @@ onBeforeUnmount(() => {
                 @click="showTransferProgressModal = true"
                 :title="t('terminalTabBar.showTransferProgressTooltip', '查看传输进度')">
           <i class="fas fa-tasks text-sm"></i>
+          <span class="fd-tab-action-label">{{ t('terminalTabBar.showTransferProgressTooltip') }}</span>
         </button>
         <!-- +++ 使用 v-if 隐藏移动端的布局按钮 +++ -->
         <button v-if="!isMobile" class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
                 @click="openLayoutConfigurator" :title="t('layout.configure', '配置布局')">
           <i class="fas fa-th-large text-sm"></i>
+          <span class="fd-tab-action-label">{{ t('layout.configure') }}</span>
         </button>
     </div>
     <!-- Connection List Popup -->

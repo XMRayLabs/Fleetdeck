@@ -76,6 +76,7 @@ const mobileLayoutNodeForTerminal = computed((): LayoutNode | null => {
 const showAddEditForm = ref(false);
 const connectionToEdit = ref<ConnectionInfo | null>(null);
 const showLayoutConfigurator = ref(false); // 控制布局配置器可见性
+const showEmptyPanels = ref(false);
 // 本地 RDP 状态已被移除
 
 // --- 搜索状态 ---
@@ -720,8 +721,24 @@ const closeFileManagerModal = () => {
         @close-sessions-to-left="handleCloseSessionsToLeft"
     />
 
-    <!-- --- 桌面端布局 --- -->
-    <template v-if="!isMobile">
+    <section v-if="!showEmptyPanels && sessionTabsWithStatus.length === 0 && editorTabs.length === 0" class="fd-workspace-welcome">
+      <div class="fd-workspace-intro">
+        <span class="fd-workspace-symbol"><i class="fas fa-terminal" aria-hidden="true"></i></span>
+        <h1>{{ t('nav.terminal') }}</h1>
+        <p>{{ t('ui.pages.Workspace') }}</p>
+        <div class="fd-workspace-actions">
+          <RouterLink to="/connections" class="fd-workspace-primary"><i class="fas fa-server" aria-hidden="true"></i>{{ t('nav.connections') }}</RouterLink>
+          <button @click="handleRequestAddConnection"><i class="fas fa-plus" aria-hidden="true"></i>{{ t('connections.addConnection') }}</button>
+        </div>
+        <button class="fd-open-panels" @click="showEmptyPanels = true">{{ t('workspace.openPanels') }} <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+      </div>
+      <div class="fd-workspace-shortcuts">
+        <RouterLink to="/orchestration"><i class="fas fa-layer-group" aria-hidden="true"></i><strong>{{ t('nav.orchestration') }}</strong><span>{{ t('ui.pages.Orchestration') }}</span><i class="fas fa-arrow-right" aria-hidden="true"></i></RouterLink>
+        <RouterLink to="/playbooks"><i class="fas fa-list-check" aria-hidden="true"></i><strong>{{ t('nav.playbooks') }}</strong><span>{{ t('ui.pages.Playbooks') }}</span><i class="fas fa-arrow-right" aria-hidden="true"></i></RouterLink>
+      </div>
+    </section>
+    <!-- Keep the existing session/split-pane tree when a session is open. -->
+    <template v-else-if="!isMobile">
       <div class="main-content-area">
         <LayoutRenderer
           v-if="layoutTree"

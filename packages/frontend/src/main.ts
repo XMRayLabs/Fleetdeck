@@ -8,7 +8,7 @@ import { useAuthStore } from './stores/auth.store';
 import { useSettingsStore } from './stores/settings.store'; 
 import { useAppearanceStore } from './stores/appearance.store'; 
 import './style.css';
-import '@fortawesome/fontawesome-free/css/all.min.css';
+import 'virtual:fleetdeck-icons.css';
 import 'splitpanes/dist/splitpanes.css';
 import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';

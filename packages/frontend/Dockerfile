@@ -10,7 +10,7 @@ COPY packages/remote-gateway/package.json ./packages/remote-gateway/
 RUN npm ci
 
 COPY packages/frontend/src ./packages/frontend/src
-COPY packages/frontend/index.html packages/frontend/tsconfig.json packages/frontend/vite.config.ts ./packages/frontend/
+COPY packages/frontend/index.html packages/frontend/tsconfig.json packages/frontend/vite.config.ts packages/frontend/icon-plugin.mjs ./packages/frontend/
 COPY packages/frontend/public ./packages/frontend/public/
 RUN npm run build --workspace=@fleetdeck/frontend
 

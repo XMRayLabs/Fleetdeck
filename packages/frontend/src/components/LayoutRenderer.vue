@@ -4,7 +4,6 @@ import { computed, defineAsyncComponent, type PropType, type Component, ref, wat
 import DOMPurify from 'dompurify';
 import { useI18n } from 'vue-i18n';
 import { useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents';
-import '@fortawesome/fontawesome-free/css/all.min.css';
 import { Splitpanes, Pane } from 'splitpanes';
 import { useLayoutStore, type LayoutNode, type PaneName } from '../stores/layout.store';
 import { useSessionStore } from '../stores/session.store';
@@ -355,6 +354,8 @@ watch(sidebarPanes, (newVal) => {
 // --- Icon Helper ---
 const getIconClasses = (paneName: PaneName): string[] => {
   switch (paneName) {
+    case 'terminal': return ['fas', 'fa-terminal'];
+    case 'commandBar': return ['fas', 'fa-keyboard'];
     case 'connections': return ['fas', 'fa-network-wired'];
     case 'fileManager': return ['fas', 'fa-folder-open'];
     case 'commandHistory': return ['fas', 'fa-history'];
@@ -503,6 +504,10 @@ onBeforeUnmount(() => {
 
             <!-- Pane Node -->
             <template v-else-if="layoutNode.type === 'pane'">
+                <header v-if="layoutNode.component && layoutNode.component !== 'commandBar'" class="fd-pane-heading">
+                  <i :class="getIconClasses(layoutNode.component)" aria-hidden="true"></i>
+                  <span>{{ paneLabels[layoutNode.component] }}</span>
+                </header>
                 <!-- Terminal Pane: Render ALL SSH sessions, show only the active one -->
                <template v-if="layoutNode.component === 'terminal'">
                    <div
