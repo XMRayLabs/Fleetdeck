@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatConnectionAddress } from '../utils/formatConnectionAddress';
 import { computed, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
@@ -478,7 +479,7 @@ onMounted(async () => {
             <div class="section-title"><span>01</span><div><h3>选择目标服务器</h3><p>支持按分组筛选，也可逐台指定。</p></div><strong class="selected-count">已选 {{ selectedIds.length }} 台</strong></div>
             <div class="server-filters"><label><i class="fas fa-magnifying-glass"></i><input v-model="serverSearch" placeholder="名称、IP 或用户" /></label><select v-model="selectedTagId"><option value="all">全部分组</option><option v-for="tag in tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option></select><button @click="toggleVisible">{{ allVisibleSelected ? '取消当前结果' : '选择当前结果' }}</button></div>
             <div class="server-list">
-              <button v-for="connection in filteredConnections" :key="connection.id" :class="{ selected: selectedIds.includes(connection.id) }" @click="toggleConnection(connection.id)"><span class="checkbox"><i v-if="selectedIds.includes(connection.id)" class="fas fa-check"></i></span><i class="fas fa-server"></i><span><strong>{{ connection.name || connection.host }}</strong><small>{{ connection.username }}@{{ connection.host }}:{{ connection.port }}</small></span><em>{{ tagNames(connection).slice(0, 2).join(' · ') }}</em><small class="credential">{{ connection.credential_mode === 'prompt' ? '每次输入' : '已保存凭据' }}</small></button>
+              <button v-for="connection in filteredConnections" :key="connection.id" :class="{ selected: selectedIds.includes(connection.id) }" @click="toggleConnection(connection.id)"><span class="checkbox"><i v-if="selectedIds.includes(connection.id)" class="fas fa-check"></i></span><i class="fas fa-server"></i><span><strong>{{ connection.name || connection.host }}</strong><small>{{ formatConnectionAddress(connection) }}</small></span><em>{{ tagNames(connection).slice(0, 2).join(' · ') }}</em><small class="credential">{{ connection.credential_mode === 'prompt' ? '每次输入' : '已保存凭据' }}</small></button>
               <div v-if="!filteredConnections.length" class="compact-empty">没有匹配的 SSH 服务器。</div>
             </div>
           </section>

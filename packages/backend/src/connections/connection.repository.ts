@@ -1,4 +1,5 @@
 import { Database } from 'sqlite3';
+import { normalizeHost } from '../utils/normalizeHost';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 
 
@@ -200,7 +201,7 @@ export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'cr
     const params = [
         data.name ?? null,
         data.type, // Add type parameter
-        data.host, data.port, data.username, data.auth_method, data.credential_mode || 'saved',
+        normalizeHost(data.host), data.port, data.username, data.auth_method, data.credential_mode || 'saved',
         data.encrypted_password ?? null, data.encrypted_private_key ?? null, data.encrypted_passphrase ?? null,
         data.proxy_id ?? null,
         data.proxy_type ?? null, // Add proxy_type parameter
@@ -231,6 +232,7 @@ export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'cr
 export const updateConnection = async (id: number, data: Partial<Omit<FullConnectionData, 'id' | 'created_at' | 'last_connected_at' | 'tag_ids'>>): Promise<boolean> => {
     console.log(`[Repository:updateConnection] Received data for ID ${id}:`, JSON.stringify(data, null, 2));
     const fieldsToUpdate: { [key: string]: any } = { ...data };
+    if (typeof fieldsToUpdate.host === 'string') fieldsToUpdate.host = normalizeHost(fieldsToUpdate.host);
     const params: any[] = [];
 
     delete fieldsToUpdate.id;
@@ -407,7 +409,7 @@ export const bulkInsertConnections = async (
 
     for (const connData of connections) {
         const params = [
-            connData.name ?? null, connData.type, connData.host, connData.port, connData.username, connData.auth_method, // Add type parameter
+            connData.name ?? null, connData.type, normalizeHost(connData.host), connData.port, connData.username, connData.auth_method, // Add type parameter
             connData.encrypted_password || null,
             connData.encrypted_private_key || null,
             connData.encrypted_passphrase || null,

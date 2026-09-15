@@ -119,6 +119,21 @@ const proxy = (req, res, port, headers) => {
   assert.equal(page.url(), origin + '/', 'Login must survive a full reload');
   assert.equal((await context.request.get(origin + '/api/v1/auth/status')).status(), 200);
   console.log('PASS real login: Secure cookie, authenticated dashboard, reload retains session');
+  const ipv6Record = await context.request.post(origin + '/api/v1/connections', { data: {
+    name: 'ipv6-save-test', type: 'SSH', host: '2001:0db8:0000:0000:0000:0000:0000:0001',
+    port: 22, username: 'root', auth_method: 'password', credential_mode: 'prompt',
+  } });
+  assert.ok(ipv6Record.ok());
+  const { connection: ipv6 } = await ipv6Record.json();
+  assert.equal(ipv6.host, '2001:db8::1');
+  const edited = await context.request.put(origin + '/api/v1/connections/' + ipv6.id, { data: { host: '2001:0db8:0000:0000:0000:0000:0000:0002' } });
+  assert.ok(edited.ok());
+  const stored = await (await context.request.get(origin + '/api/v1/connections/' + ipv6.id)).json();
+  assert.equal(stored.host, '2001:db8::2');
+  assert.equal(stored.port, 22);
+  assert.equal(stored.username, 'root');
+  assert.ok((await context.request.delete(origin + '/api/v1/connections/' + ipv6.id)).ok());
+  console.log('PASS IPv6 create/update persisted canonically; username and port preserved');
   const iconState = await page.evaluate(async () => {
     await document.fonts.ready;
     return [...document.querySelectorAll('.fd-overview-grid i')].map(icon => {

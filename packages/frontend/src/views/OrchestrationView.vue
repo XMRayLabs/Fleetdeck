@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatConnectionAddress } from '../utils/formatConnectionAddress';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import apiClient from '../utils/apiClient';
@@ -347,7 +348,7 @@ onBeforeUnmount(() => {
             >
               <span class="checkbox"><i v-if="selectedIds.includes(connection.id)" class="fas fa-check"></i></span>
               <span class="server-icon"><i class="fas fa-server"></i></span>
-              <span class="server-main"><strong>{{ connection.name || connection.host }}</strong><small>{{ connection.username }}@{{ connection.host }}:{{ connection.port }}</small></span>
+              <span class="server-main"><strong>{{ connection.name || connection.host }}</strong><small>{{ formatConnectionAddress(connection) }}</small></span>
               <span class="server-tags"><em v-for="name in tagNames(connection).slice(0, 2)" :key="name">{{ name }}</em></span>
               <span class="credential"><i :class="connection.credential_mode === 'prompt' ? 'fas fa-keyboard' : connection.auth_method === 'key' ? 'fas fa-key' : 'fas fa-lock'"></i>{{ connection.credential_mode === 'prompt' ? '每次输入' : connection.auth_method === 'key' ? '密钥' : '密码' }}</span>
             </button>

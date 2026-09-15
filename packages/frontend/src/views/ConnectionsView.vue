@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatConnectionAddress } from '../utils/formatConnectionAddress';
 import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import AddConnectionForm from '../components/AddConnectionForm.vue';
 import BatchEditConnectionForm from '../components/BatchEditConnectionForm.vue';
@@ -641,8 +642,8 @@ const handleConnectAllFilteredConnections = async () => {
                 <i :class="['fas', conn.type === 'VNC' ? 'fa-plug' : (conn.type === 'RDP' ? 'fa-desktop' : 'fa-server'), 'mr-2 w-4 text-center text-text-secondary']"></i>
                 <span>{{ conn.name || conn.host || t('connections.unnamedFallback', '未命名连接') }}</span>
               </span>
-              <span class="text-sm text-text-secondary block truncate" :title="`${conn.username}@${conn.host}:${conn.port}`">
-                {{ conn.username }}@{{ conn.host }}:{{ conn.port }}
+              <span class="text-sm text-text-secondary block truncate" :title="formatConnectionAddress(conn)">
+                {{ formatConnectionAddress(conn) }}
               </span>
               <span class="text-xs text-text-alt block">
                 {{ t('dashboard.lastConnected', '上次连接:') }} {{ formatRelativeTime(conn.last_connected_at) }}
