@@ -28,6 +28,7 @@ const maxAllowedHeight = computed(() => window.innerHeight - MODAL_CONTAINER_PAD
 
 const rdpDisplayRef = ref<HTMLDivElement | null>(null);
 const rdpContainerRef = ref<HTMLDivElement | null>(null);
+const modalRef = ref<HTMLDivElement | null>(null);
 const guacClient = ref<any | null>(null);
 const connectionStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
 const isResizing = ref(false);
@@ -67,6 +68,20 @@ const applyResolution = () => {
     fitDisplay();
   }
 };
+const selectResolution = async () => {
+  if (rdpResolutions.includes(resolution.value) && modalRef.value && rdpContainerRef.value) {
+    const [width, height] = remoteSize();
+    // Include the modal border and toolbars, not just the remote framebuffer.
+    const chromeWidth = modalRef.value.offsetWidth - rdpContainerRef.value.clientWidth;
+    desiredModalWidth.value = Math.min(width + chromeWidth, window.innerWidth - MODAL_CONTAINER_PADDING);
+    await nextTick(); // Toolbar wrapping may change at the new width.
+    const chromeHeight = modalRef.value.offsetHeight - rdpContainerRef.value.clientHeight;
+    desiredModalHeight.value = Math.min(height + chromeHeight, window.innerHeight - MODAL_CONTAINER_PADDING);
+    await nextTick();
+  }
+  applyResolution();
+  fitDisplay();
+};
 const sendShortcut = () => {
   const selected = rdpShortcuts.find(item => item.label === shortcut.value);
   const client = guacClient.value;
@@ -89,8 +104,8 @@ let dragOffsetX = 0;
 let dragOffsetY = 0;
 let hasDragged = false; 
 
-const MIN_MODAL_WIDTH = 1024;
-const MIN_MODAL_HEIGHT = 768;
+const MIN_MODAL_WIDTH = 640;
+const MIN_MODAL_HEIGHT = 400;
 
 // Dynamically construct WebSocket URL based on environment
 let backendBaseUrl: string;
@@ -709,6 +724,7 @@ const stopResize = () => {
     </button>
     <div
       v-show="!isMinimized"
+      ref="modalRef"
       :style="computedModalStyle"
       class="bg-background text-foreground rounded-lg shadow-xl flex flex-col overflow-hidden border border-border pointer-events-auto relative"
     >
@@ -746,7 +762,7 @@ const stopResize = () => {
 
       <div class="fd-rdp-tools">
         <label for="rdp-resolution">{{ t('rdpControls.resolution') }}</label>
-        <select id="rdp-resolution" v-model="resolution" @change="applyResolution" :disabled="connectionStatus === 'connecting'">
+        <select id="rdp-resolution" v-model="resolution" @change="selectResolution" :disabled="connectionStatus === 'connecting'">
           <option value="auto">{{ t('rdpControls.auto') }}</option>
           <option v-for="size in rdpResolutions" :key="size" :value="size">{{ size.replace('x', ' × ') }}</option>
         </select>

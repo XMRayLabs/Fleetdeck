@@ -241,7 +241,15 @@ const proxy = (req, res, port, headers) => {
     await page.locator('li').filter({ hasText: 'windows-admin' }).getByRole('button', { name: 'Connect', exact: true }).click();
     await page.getByText('Isolated RDP test: no remote server', { exact: false }).waitFor();
     assert.equal(await page.locator('#rdp-resolution option').count(), 7);
+    const rdpModal = page.locator('#rdp-resolution').locator('xpath=../..');
+    await page.locator('#rdp-resolution').selectOption('1024x768');
+    await page.waitForTimeout(100);
+    const smallModal = await rdpModal.boundingBox();
     await page.locator('#rdp-resolution').selectOption('1920x1080');
+    await page.waitForTimeout(100);
+    const largeModal = await rdpModal.boundingBox();
+    assert.ok(largeModal.width > smallModal.width, 'Preset must resize the browser modal as well as the remote desktop');
+    assert.ok(largeModal.width <= 1440 - 32 && largeModal.height <= 960 - 32, 'Modal must stay within the viewport');
     assert.ok(await page.locator('#rdp-shortcut').isDisabled(), 'Keys must not be sent while disconnected');
     const requested = page.waitForRequest(request => request.url().includes('/rdp-session?width=1920&height=1080'));
     await page.getByRole('button', { name: 'Retry', exact: true }).click();
