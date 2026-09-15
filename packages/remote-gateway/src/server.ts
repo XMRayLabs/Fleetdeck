@@ -122,6 +122,7 @@ app.post('/api/remote-desktop/token', internalAuthentication, (req: Request, res
             ? connectionConfig.security
             : 'any';
         settings.security = security;
+        settings['resize-method'] = 'display-update';
         settings['ignore-cert'] = connectionConfig.ignoreCert === false || connectionConfig.ignoreCert === 'false'
             ? 'false'
             : 'true';

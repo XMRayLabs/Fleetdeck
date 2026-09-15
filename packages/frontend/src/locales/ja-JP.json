@@ -1,4 +1,5 @@
 {
+  "rdpControls": {"resolution":"解像度","auto":"ウィンドウに合わせる","sendKeys":"キーを送信","chooseKeys":"ショートカットを選択","hint":"解像度の変更にはサーバーの対応が必要です。反映されない場合は再接続してください。下の幅と高さはウィンドウサイズです。"},
   "ui.expandSidebar": "サイドバーを展開",
   "ui.collapseSidebar": "サイドバーを折りたたむ",
   "workspace.openPanels": "ワークスペースツールを開く",

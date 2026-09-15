@@ -6,6 +6,7 @@ import { useConnectionsStore } from '../stores/connections.store';
 // @ts-ignore - guacamole-common-js 缺少官方类型定义
 import Guacamole from 'guacamole-common-js';
 import apiClient from '../utils/apiClient';
+import { rdpResolutions, rdpShortcuts, sendRdpShortcut } from '../utils/rdpControls';
 import { ConnectionInfo } from '../stores/connections.store';
 
 const { t } = useI18n();
@@ -39,6 +40,42 @@ const keyboard = ref<any | null>(null);
 const mouse = ref<any | null>(null);
 const desiredModalWidth = ref(1064);
 const desiredModalHeight = ref(858);
+const resolution = ref('auto');
+const shortcut = ref('');
+const actualResolution = ref('');
+let displayObserver: ResizeObserver | null = null;
+let lastRequestedSize = '';
+const remoteSize = () => {
+  if (rdpResolutions.includes(resolution.value)) return resolution.value.split('x').map(Number);
+  return [Math.max(320, rdpContainerRef.value?.clientWidth || 1024), Math.max(200, rdpContainerRef.value?.clientHeight || 768)];
+};
+const fitDisplay = () => {
+  const display = guacClient.value?.getDisplay();
+  const container = rdpContainerRef.value;
+  if (!display || !container || !display.getWidth() || !display.getHeight()) return;
+  actualResolution.value = `${display.getWidth()} × ${display.getHeight()}`;
+  display.scale(Math.min(1, container.clientWidth / display.getWidth(), container.clientHeight / display.getHeight()));
+};
+const applyResolution = () => {
+  if (connectionStatus.value === 'connected' && guacClient.value) {
+    const [width, height] = remoteSize();
+    const size = `${width}x${height}`;
+    if (size !== lastRequestedSize) {
+      guacClient.value.sendSize(width, height);
+      lastRequestedSize = size;
+    }
+    fitDisplay();
+  }
+};
+const sendShortcut = () => {
+  const selected = rdpShortcuts.find(item => item.label === shortcut.value);
+  const client = guacClient.value;
+  shortcut.value = '';
+  if (!selected || !client || connectionStatus.value !== 'connected') return;
+  keyboard.value?.reset();
+  sendRdpShortcut((pressed, key) => client.sendKeyEvent(pressed, key), selected.keys);
+  client.getDisplay().getElement().focus();
+};
 
 const tempInputWidth = ref<number | string>(desiredModalWidth.value);
 const tempInputHeight = ref<number | string>(desiredModalHeight.value);
@@ -80,6 +117,8 @@ const handleConnection = async () => {
     rdpDisplayRef.value.removeChild(rdpDisplayRef.value.firstChild);
   }
   disconnectGuacamole(); // Renamed from disconnectRdp
+  lastRequestedSize = '';
+  actualResolution.value = '';
 
   connectionStatus.value = 'connecting';
   statusMessage.value = t('remoteDesktopModal.status.fetchingToken');
@@ -90,7 +129,8 @@ const handleConnection = async () => {
     const connectionsStore = useConnectionsStore();
 
     if (props.connection.type === 'RDP') {
-      const apiUrl = `connections/${props.connection.id}/rdp-session`;
+      const [requestedWidth, requestedHeight] = remoteSize();
+      const apiUrl = `connections/${props.connection.id}/rdp-session?width=${requestedWidth}&height=${requestedHeight}&dpi=96`;
       let temporaryPassword: string | undefined;
       if (props.connection.credential_mode === 'prompt') {
         const entered = window.prompt(`请输入 ${props.connection.name || props.connection.host} 的 RDP 密码`);
@@ -109,17 +149,8 @@ const handleConnection = async () => {
       statusMessage.value = t('remoteDesktopModal.status.connectingWs');
 
       await nextTick();
-      let widthToSend = 800;
-      let heightToSend = 600;
       const dpiToSend = 96;
-
-      if (rdpContainerRef.value) {
-        widthToSend = rdpContainerRef.value.clientWidth;
-        heightToSend = rdpContainerRef.value.clientHeight - 1;
-        widthToSend = Math.max(100, widthToSend);
-        heightToSend = Math.max(100, heightToSend);
-      }
-      tunnelUrl = `${backendBaseUrl}/rdp-proxy?token=${encodeURIComponent(token)}&width=${widthToSend}&height=${heightToSend}&dpi=${dpiToSend}`;
+      tunnelUrl = `${backendBaseUrl}/rdp-proxy?token=${encodeURIComponent(token)}&width=${requestedWidth}&height=${requestedHeight}&dpi=${dpiToSend}`;
 
     } else {
       throw new Error(`Unsupported connection type: ${props.connection.type}`);
@@ -141,8 +172,10 @@ const handleConnection = async () => {
     guacClient.value.keepAliveFrequency = 3000;
 
     rdpDisplayRef.value.appendChild(guacClient.value.getDisplay().getElement());
+    guacClient.value.getDisplay().onresize = fitDisplay;
 
     guacClient.value.onstatechange = (state: number) => {
+      if (connectionStatus.value === 'error' && (state === 4 || state === 5)) return;
       let currentStatus = '';
       let i18nKeyPart = 'unknownState';
 
@@ -163,6 +196,7 @@ const handleConnection = async () => {
           i18nKeyPart = 'connected';
           currentStatus = 'connected';
           setupInputListeners();
+          nextTick(applyResolution);
           nextTick(() => {
             const displayEl = guacClient.value?.getDisplay()?.getElement();
             if (displayEl && typeof displayEl.focus === 'function') {
@@ -293,7 +327,8 @@ const setupInputListeners = () => {
         // @ts-ignore
         mouse.value.onmousedown = mouse.value.onmouseup = mouse.value.onmousemove = (mouseState: any) => {
             if (guacClient.value) {
-                guacClient.value.sendMouseState(mouseState);
+                const scale = guacClient.value.getDisplay().getScale() || 1;
+                guacClient.value.sendMouseState({ ...mouseState, x: mouseState.x / scale, y: mouseState.y / scale });
             }
         };
 
@@ -539,6 +574,10 @@ watchEffect(() => {
  });
   
 onMounted(() => {
+  if (rdpContainerRef.value) {
+    displayObserver = new ResizeObserver(() => { applyResolution(); fitDisplay(); });
+    displayObserver.observe(rdpContainerRef.value);
+  }
   if (Number(tempInputWidth.value) !== desiredModalWidth.value) {
     tempInputWidth.value = desiredModalWidth.value;
   }
@@ -558,6 +597,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  displayObserver?.disconnect();
   disconnectGuacamole(); // 这里已经调用了 removeInputListeners
   document.removeEventListener('mousemove', onRestoreButtonMouseMove);
   document.removeEventListener('mouseup', onRestoreButtonMouseUp);
@@ -603,7 +643,7 @@ watchEffect(() => {
         const displayHeight = rdpContainerRef.value.offsetHeight;
         if (displayWidth > 0 && displayHeight > 0) {
           // console.log(`[RDP Modal] Resizing Guacamole display to: ${displayWidth}x${displayHeight} due to style change.`);
-          guacClient.value.sendSize(displayWidth, displayHeight);
+          applyResolution();
         }
       }
     });
@@ -704,7 +744,21 @@ const stopResize = () => {
         </div>
       </div>
 
-      <div ref="rdpContainerRef" class="relative bg-black overflow-hidden flex-1">
+      <div class="fd-rdp-tools">
+        <label for="rdp-resolution">{{ t('rdpControls.resolution') }}</label>
+        <select id="rdp-resolution" v-model="resolution" @change="applyResolution" :disabled="connectionStatus === 'connecting'">
+          <option value="auto">{{ t('rdpControls.auto') }}</option>
+          <option v-for="size in rdpResolutions" :key="size" :value="size">{{ size.replace('x', ' × ') }}</option>
+        </select>
+        <span class="fd-rdp-actual">{{ actualResolution }}</span>
+        <label for="rdp-shortcut">{{ t('rdpControls.sendKeys') }}</label>
+        <select id="rdp-shortcut" v-model="shortcut" @change="sendShortcut" :disabled="connectionStatus !== 'connected'">
+          <option value="" disabled>{{ t('rdpControls.chooseKeys') }}</option>
+          <option v-for="item in rdpShortcuts" :key="item.label" :value="item.label">{{ item.label }}</option>
+        </select>
+        <span class="fd-rdp-hint">{{ t('rdpControls.hint') }}</span>
+      </div>
+      <div ref="rdpContainerRef" class="relative bg-black overflow-hidden flex-1 min-h-0">
         <div ref="rdpDisplayRef" class="rdp-display-container w-full h-full">
         </div>
          <div v-if="connectionStatus === 'connecting' || connectionStatus === 'error'"

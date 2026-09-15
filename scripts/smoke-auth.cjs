@@ -231,6 +231,21 @@ const proxy = (req, res, port, headers) => {
       await page.locator('.drawer').waitFor({ state: 'visible' });
       await page.screenshot({ path: path.join(directory, `${width}-playbook-editor.png`), fullPage: true });
     }
+    // Inspect RDP controls without reaching any real Windows host.
+    await page.setViewportSize({ width: 1440, height: 960 });
+    await page.route('**/rdp-session?*', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Isolated RDP test: no remote server' }) }));
+    page.on('dialog', dialog => dialog.accept('test-only-not-a-real-password'));
+    await page.goto(origin + '/', { waitUntil: 'networkidle' });
+    await page.locator('li').filter({ hasText: 'windows-admin' }).getByRole('button', { name: 'Connect', exact: true }).click();
+    await page.getByText('Isolated RDP test: no remote server', { exact: false }).waitFor();
+    assert.equal(await page.locator('#rdp-resolution option').count(), 7);
+    await page.locator('#rdp-resolution').selectOption('1920x1080');
+    assert.ok(await page.locator('#rdp-shortcut').isDisabled(), 'Keys must not be sent while disconnected');
+    const requested = page.waitForRequest(request => request.url().includes('/rdp-session?width=1920&height=1080'));
+    await page.getByRole('button', { name: 'Retry', exact: true }).click();
+    await requested;
+    await page.screenshot({ path: path.join(directory, '1440-rdp-controls.png'), fullPage: true });
+    await page.reload({ waitUntil: 'networkidle' });
     await page.setViewportSize({ width: 1440, height: 960 });
     await page.goto(origin + '/orchestration', { waitUntil: 'networkidle' });
     await page.evaluate(() => {

@@ -1,4 +1,5 @@
 {
+  "rdpControls": {"resolution":"Resolution","auto":"Fit window","sendKeys":"Send keys","chooseKeys":"Choose shortcut","hint":"Resolution changes require server support. If unchanged, reconnect. Window width/height below only resize this panel."},
   "ui.expandSidebar": "Expand sidebar",
   "ui.collapseSidebar": "Collapse sidebar",
   "workspace.openPanels": "Open workspace tools",

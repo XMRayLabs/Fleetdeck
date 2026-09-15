@@ -1,4 +1,5 @@
 {
+  "rdpControls": {"resolution":"远端分辨率","auto":"跟随窗口","sendKeys":"发送组合键","chooseKeys":"选择快捷键","hint":"动态分辨率需要远端支持；未生效时可点击重新连接。下方宽高仅调整窗口大小。"},
   "ui.expandSidebar": "展开侧边栏",
   "ui.collapseSidebar": "折叠侧边栏",
   "workspace.openPanels": "打开工作区工具",

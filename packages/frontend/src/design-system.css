@@ -120,6 +120,10 @@
 }
 #app-container button:disabled { opacity:.55; cursor:not-allowed; }
 .fd-sidebar-toggle { display:none; }
+.fd-rdp-tools { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 12px; background:var(--fd-subtle); border-bottom:1px solid var(--fd-line); flex-shrink:0; font-size:12px; }
+.fd-rdp-tools select { min-height:32px; padding:4px 8px; border:1px solid var(--fd-line); border-radius:7px; background:var(--fd-surface); color:var(--text-color); }
+.fd-rdp-actual,.fd-rdp-hint { color:var(--text-color-secondary); font-size:11px; }
+.fd-rdp-hint { flex-basis:100%; }
 @media(min-width:1024px) {
   .fd-offset { margin-left:var(--fd-sidebar-width); }
   .fd-main-offset { padding-left:var(--fd-sidebar-width); }
