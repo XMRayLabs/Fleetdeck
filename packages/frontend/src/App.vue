@@ -304,13 +304,12 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
         <RouterLink v-for="item in navigationItems" :key="item.to" :to="item.to" :title="item.label" :aria-label="item.label"><i :class="item.icon" aria-hidden="true"></i><span>{{ item.label }}</span></RouterLink>
       </nav>
       <div class="fd-sidebar-footer">
-        <button @click="openStyleCustomizer" :title="t('ui.appearance')" :aria-label="t('ui.appearance')"><i class="fa-solid fa-palette mr-2" aria-hidden="true"></i><span>{{ t('ui.appearance') }}</span></button>
+        <button @click="toggleSidebar" :aria-expanded="!sidebarCollapsed" :title="t(sidebarCollapsed ? 'ui.expandSidebar' : 'ui.collapseSidebar')" :aria-label="t(sidebarCollapsed ? 'ui.expandSidebar' : 'ui.collapseSidebar')"><i :class="[sidebarCollapsed ? 'fas fa-angles-right' : 'fas fa-angles-left', 'mr-2']" aria-hidden="true"></i><span>{{ t(sidebarCollapsed ? 'ui.expandSidebar' : 'ui.collapseSidebar') }}</span></button>
         <button @click="handleLogout" :title="t('nav.logout')" :aria-label="t('nav.logout')"><i class="fa-solid fa-arrow-right-from-bracket mr-2" aria-hidden="true"></i><span>{{ t('nav.logout') }}</span></button>
       </div>
     </aside>
     <header v-if="showAppShell" :class="['fd-topbar sticky top-0 z-20 flex items-center justify-between', { 'fd-offset': showDesktopSidebar }]">
       <div class="flex items-center gap-3">
-        <button class="fd-icon-button fd-sidebar-toggle" :aria-expanded="!sidebarCollapsed" :aria-label="t(sidebarCollapsed ? 'ui.expandSidebar' : 'ui.collapseSidebar')" :title="t(sidebarCollapsed ? 'ui.expandSidebar' : 'ui.collapseSidebar')" @click="toggleSidebar"><i :class="sidebarCollapsed ? 'fas fa-angles-right' : 'fas fa-angles-left'" aria-hidden="true"></i></button>
         <button class="fd-icon-button lg:hidden" :aria-label="t('ui.navigation')" :aria-expanded="mobileMenuOpen" @click="mobileMenuOpen = !mobileMenuOpen"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
         <div class="fd-breadcrumb"><RouterLink to="/">FleetDeck</RouterLink><span>/</span><strong>{{ currentPageTitle }}</strong></div>
       </div>

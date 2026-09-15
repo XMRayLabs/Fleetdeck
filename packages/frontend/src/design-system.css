@@ -119,7 +119,6 @@
   outline:2px solid var(--link-active-color) !important; outline-offset:3px; box-shadow:none !important;
 }
 #app-container button:disabled { opacity:.55; cursor:not-allowed; }
-.fd-sidebar-toggle { display:none; }
 .fd-rdp-tools { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 12px; background:var(--fd-subtle); border-bottom:1px solid var(--fd-line); flex-shrink:0; font-size:12px; }
 .fd-rdp-tools select { min-height:32px; padding:4px 8px; border:1px solid var(--fd-line); border-radius:7px; background:var(--fd-surface); color:var(--text-color); }
 .fd-rdp-actual,.fd-rdp-hint { color:var(--text-color-secondary); font-size:11px; }
@@ -128,7 +127,6 @@
   .fd-offset { margin-left:var(--fd-sidebar-width); }
   .fd-main-offset { padding-left:var(--fd-sidebar-width); }
   .fd-topbar .lg\:hidden { display:none; }
-  .fd-sidebar-toggle { display:inline-grid; }
   .fd-sidebar-collapsed { --fd-sidebar-width:64px; }
   .fd-sidebar-collapsed aside .fd-brand { padding:0 4px 24px; }
   .fd-sidebar-collapsed aside .fd-brand > span:last-child,

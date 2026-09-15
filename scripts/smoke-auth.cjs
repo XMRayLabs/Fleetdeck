@@ -119,10 +119,12 @@ const proxy = (req, res, port, headers) => {
   assert.equal(page.url(), origin + '/', 'Login must survive a full reload');
   assert.equal((await context.request.get(origin + '/api/v1/auth/status')).status(), 200);
   console.log('PASS real login: Secure cookie, authenticated dashboard, reload retains session');
-  await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
+  assert.equal(await page.locator('.fd-topbar').getByRole('button', { name: 'Collapse sidebar', exact: true }).count(), 0);
+  assert.equal(await page.locator('aside.fd-sidebar').getByRole('button', { name: 'Appearance', exact: true }).count(), 0);
+  await page.locator('aside.fd-sidebar').getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
   await page.reload({ waitUntil: 'networkidle' });
   assert.equal(await page.locator('aside.fd-sidebar').evaluate(el => Math.round(el.getBoundingClientRect().width)), 64);
-  await page.getByRole('button', { name: 'Expand sidebar', exact: true }).click();
+  await page.locator('aside.fd-sidebar').getByRole('button', { name: 'Expand sidebar', exact: true }).click();
   assert.equal(await page.locator('aside.fd-sidebar').evaluate(el => Math.round(el.getBoundingClientRect().width)), 192);
   console.log('PASS sidebar: compact width and persistent collapse');
   const ipv6Record = await context.request.post(origin + '/api/v1/connections', { data: {
