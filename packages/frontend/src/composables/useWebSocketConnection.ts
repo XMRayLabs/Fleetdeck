@@ -1,4 +1,5 @@
 import { ref, shallowRef, computed, readonly } from 'vue';
+import { connectionError } from '../utils/connectionError';
 import { useI18n } from 'vue-i18n'; // +++ Add import for useI18n +++
 // 从 websocket.types.ts 导入并重新导出 ConnectionStatus
 import type { ConnectionStatus as WsConnectionStatusType, MessagePayload, WebSocketMessage, MessageHandler } from '../types/websocket.types';
@@ -211,16 +212,15 @@ export function createWebSocketConnectionManager(
                             statusMessage.value = getStatusText('connected');
                         }
                     } else if (message.type === 'ssh:disconnected') {
-                        if (connectionStatus.value !== 'disconnected') {
+                        if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') {
                             connectionStatus.value = 'disconnected';
                             statusMessage.value = getStatusText('disconnected', { reason: message.payload || '未知原因' });
                             isSftpReady.value = false; // SSH 断开，SFTP 也应不可用
                         }
                     } else if (message.type === 'ssh:error' || message.type === 'error') {
-                        if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') {
+                        if (connectionStatus.value !== 'error') {
                             connectionStatus.value = 'error';
-                            let errorMsg = message.payload || '未知错误';
-                            if (typeof errorMsg === 'object' && errorMsg.message) errorMsg = errorMsg.message;
+                            const errorMsg = connectionError(message.payload, '未知错误');
                             statusMessage.value = getStatusText('error', { message: errorMsg });
                             isSftpReady.value = false;
                         }

@@ -43,6 +43,11 @@ const route = useRoute();
 const navRef = ref<HTMLElement | null>(null);
 const underlineRef = ref<HTMLElement | null>(null);
 const mobileMenuOpen = ref(false);
+const sidebarCollapsed = ref(localStorage.getItem('fleetdeck-sidebar-collapsed') === 'true');
+const toggleSidebar = () => {
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+  localStorage.setItem('fleetdeck-sidebar-collapsed', String(sidebarCollapsed.value));
+};
 
 // +++ 存储上一次由切换器聚焦的 ID +++
 const lastFocusedIdBySwitcher = ref<string | null>(null);
@@ -292,19 +297,20 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
 </script>
 
 <template>
-  <div id="app-container" class="min-h-screen bg-background text-foreground">
+  <div id="app-container" class="min-h-screen bg-background text-foreground" :class="{ 'fd-sidebar-collapsed': sidebarCollapsed }">
     <aside v-if="showDesktopSidebar" class="fd-sidebar fixed inset-y-0 left-0 z-30 hidden lg:flex lg:flex-col">
       <RouterLink to="/" class="fd-brand"><span class="fd-brand-mark">FD</span><span><strong>FleetDeck</strong><small>{{ t('ui.console') }}</small></span></RouterLink>
       <nav class="fd-nav" :aria-label="t('ui.navigation')">
-        <RouterLink v-for="item in navigationItems" :key="item.to" :to="item.to"><i :class="item.icon" aria-hidden="true"></i><span>{{ item.label }}</span></RouterLink>
+        <RouterLink v-for="item in navigationItems" :key="item.to" :to="item.to" :title="item.label" :aria-label="item.label"><i :class="item.icon" aria-hidden="true"></i><span>{{ item.label }}</span></RouterLink>
       </nav>
       <div class="fd-sidebar-footer">
-        <button @click="openStyleCustomizer"><i class="fa-solid fa-palette mr-2" aria-hidden="true"></i>{{ t('ui.appearance') }}</button>
-        <button @click="handleLogout"><i class="fa-solid fa-arrow-right-from-bracket mr-2" aria-hidden="true"></i>{{ t('nav.logout') }}</button>
+        <button @click="openStyleCustomizer" :title="t('ui.appearance')" :aria-label="t('ui.appearance')"><i class="fa-solid fa-palette mr-2" aria-hidden="true"></i><span>{{ t('ui.appearance') }}</span></button>
+        <button @click="handleLogout" :title="t('nav.logout')" :aria-label="t('nav.logout')"><i class="fa-solid fa-arrow-right-from-bracket mr-2" aria-hidden="true"></i><span>{{ t('nav.logout') }}</span></button>
       </div>
     </aside>
     <header v-if="showAppShell" :class="['fd-topbar sticky top-0 z-20 flex items-center justify-between', { 'fd-offset': showDesktopSidebar }]">
       <div class="flex items-center gap-3">
+        <button class="fd-icon-button fd-sidebar-toggle" :aria-expanded="!sidebarCollapsed" :aria-label="t(sidebarCollapsed ? 'ui.expandSidebar' : 'ui.collapseSidebar')" :title="t(sidebarCollapsed ? 'ui.expandSidebar' : 'ui.collapseSidebar')" @click="toggleSidebar"><i :class="sidebarCollapsed ? 'fas fa-angles-right' : 'fas fa-angles-left'" aria-hidden="true"></i></button>
         <button class="fd-icon-button lg:hidden" :aria-label="t('ui.navigation')" :aria-expanded="mobileMenuOpen" @click="mobileMenuOpen = !mobileMenuOpen"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
         <div class="fd-breadcrumb"><RouterLink to="/">FleetDeck</RouterLink><span>/</span><strong>{{ currentPageTitle }}</strong></div>
       </div>

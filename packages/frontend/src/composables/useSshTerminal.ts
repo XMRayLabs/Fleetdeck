@@ -1,5 +1,6 @@
 import { ref, readonly, type Ref, ComputedRef } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { connectionError } from '../utils/connectionError';
 import { sessions as globalSessionsRef } from '../stores/session/state'; // +++ 导入全局 sessions state +++
 // import { useWebSocketConnection } from './useWebSocketConnection'; // 移除全局导入
 import type { Terminal } from 'xterm';
@@ -203,7 +204,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             return; // 忽略不属于此会话的消息
         }
 
-        const errorMsg = payload || t('workspace.terminal.unknownSshError'); // 使用 i18n
+        const errorMsg = connectionError(payload, t('workspace.terminal.unknownSshError'));
         console.error(`[会话 ${sessionId}][SSH终端模块] SSH 错误:`, errorMsg);
         isSshConnected.value = false; // 更新状态
         terminalInstance.value?.writeln(`\r\n\x1b[31m${getTerminalText('genericErrorMsg', { message: errorMsg })}\x1b[0m`);

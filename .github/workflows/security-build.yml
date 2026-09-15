@@ -28,6 +28,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node scripts/test-normalize-host.cjs
+      - run: node scripts/test-connection-error.cjs
       - run: npx playwright install --with-deps chromium
       - run: node scripts/smoke-frontend.cjs
       - name: Install Nginx for production proxy integration tests

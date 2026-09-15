@@ -1,4 +1,6 @@
 {
+  "ui.expandSidebar": "展开侧边栏",
+  "ui.collapseSidebar": "折叠侧边栏",
   "workspace.openPanels": "打开工作区工具",
   "ui": {"console":"服务器管理控制台","navigation":"主导航","appearance":"外观","pages":{"Workspace":"连接服务器，集中管理你的终端会话。","Proxies":"为服务器连接配置可复用的代理线路。","Orchestration":"选择目标，执行命令或分发文件，跟踪每台服务器的执行结果。","Playbooks":"将命令、文件和变量编排为可重复执行的自动化流程。","Notifications":"配置运维事件和告警的通知方式。","AuditLogs":"追踪服务器管理中的访问记录与配置变更。","Connections":"集中管理服务器连接、凭据和分组。","Settings":"管理工作区偏好、安全选项和界面外观。","Dashboard":"查看服务器概况，快速连接并继续你的工作。"}},
   "appName": "FleetDeck",
