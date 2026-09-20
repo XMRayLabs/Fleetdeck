@@ -6,6 +6,7 @@ import { allDb, getDb, getDbInstance, runDb } from '../database/connection';
 import { decrypt, encrypt } from '../utils/crypto';
 import * as SshService from '../services/ssh.service';
 import { AuditLogService } from '../audit/audit.service';
+import { redact as redactAiOutput } from '../ai/redact';
 
 export type JobStatus = 'queued' | 'running' | 'success' | 'partial' | 'failed' | 'cancelled';
 export type TargetStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled';
@@ -59,6 +60,8 @@ interface TargetRow {
 }
 
 export interface CommandJobInput {
+    redactOutput?: boolean;
+    redactedValues?: string[];
     name?: string;
     targetIds: number[];
     commands: string[];
@@ -87,6 +90,7 @@ export interface UploadJobInput {
 }
 
 interface CommandPayload {
+    redactOutput?: boolean;
     kind: 'command';
     commands: string[];
     recordOutput: boolean;
@@ -299,14 +303,16 @@ export const createCommandJob = async (
         name,
         'command',
         targets,
-        { kind: 'command', commands, recordOutput: input.recordOutput !== false },
-        { commandCount: commands.length, recordOutput: input.recordOutput !== false },
+        { kind: 'command', commands, recordOutput: input.recordOutput !== false, redactOutput: input.redactOutput === true },
+        { commandCount: commands.length, recordOutput: input.recordOutput !== false, aiRestricted: input.redactOutput === true },
         concurrency,
         timeoutSeconds,
         input.stopOnError !== false,
         createdBy,
         username,
         input.ephemeralCredentials,
+        undefined,
+        input.redactedValues,
     );
 };
 
@@ -562,8 +568,9 @@ const runTarget = async (job: JobRow, target: TargetRow, payload: JobPayload): P
     }
 
     const startedAt = Date.now();
-    const redact = (text: string): string => (jobPlaybookRedactions.get(job.id) || [])
-        .reduce((result, secret) => result.split(secret).join('[REDACTED]'), text);
+    const redact = (text: string): string => payload.kind === 'command' && payload.redactOutput
+        ? redactAiOutput(text, jobPlaybookRedactions.get(job.id) || [])
+        : (jobPlaybookRedactions.get(job.id) || []).reduce((result, secret) => result.split(secret).join('[REDACTED]'), text);
     await runDb(db, `UPDATE orchestration_job_targets SET status = 'running', started_at = ? WHERE id = ?`, [nowSeconds(), target.id]);
     let client: Client | null = null;
     try {
@@ -706,7 +713,9 @@ const publicJob = (row: JobRow): Record<string, unknown> => ({
     updatedAt: row.updated_at,
 });
 
-export const listJobs = async (limit = 50): Promise<Record<string, unknown>[]> => {
+const canViewJob = (row: JobRow, userId?: number | null): boolean => !JSON.parse(row.payload_summary || '{}').aiRestricted || row.created_by === userId;
+
+export const listJobs = async (limit = 50, userId?: number): Promise<Record<string, unknown>[]> => {
     const db = await getDbInstance();
     const rows = await allDb<JobRow>(
         db,
@@ -715,10 +724,10 @@ export const listJobs = async (limit = 50): Promise<Record<string, unknown>[]> =
          ORDER BY j.created_at DESC LIMIT ?`,
         [clampInteger(limit, 50, 1, 100)],
     );
-    return rows.map(publicJob);
+    return rows.filter(row => canViewJob(row, userId)).map(publicJob);
 };
 
-export const getJobDetail = async (jobId: string): Promise<Record<string, unknown> | null> => {
+export const getJobDetail = async (jobId: string, userId?: number): Promise<Record<string, unknown> | null> => {
     const db = await getDbInstance();
     const row = await getDb<JobRow>(
         db,
@@ -726,7 +735,7 @@ export const getJobDetail = async (jobId: string): Promise<Record<string, unknow
          FROM orchestration_jobs j LEFT JOIN users u ON u.id = j.created_by WHERE j.id = ?`,
         [jobId],
     );
-    if (!row) return null;
+    if (!row || !canViewJob(row, userId)) return null;
     const payload = decryptPayload(row);
     const targets = await allDb<TargetRow>(db, 'SELECT * FROM orchestration_job_targets WHERE job_id = ? ORDER BY id ASC', [jobId]);
     const safePayload = payload.kind === 'command'
@@ -764,7 +773,7 @@ export const getJobDetail = async (jobId: string): Promise<Record<string, unknow
 export const cancelJob = async (jobId: string, userId: number | null, username?: string): Promise<boolean> => {
     const db = await getDbInstance();
     const job = await getDb<JobRow>(db, 'SELECT * FROM orchestration_jobs WHERE id = ?', [jobId]);
-    if (!job) return false;
+    if (!job || !canViewJob(job, userId)) return false;
     if (!['queued', 'running'].includes(job.status)) throw new Error('Only queued or running jobs can be cancelled.');
     await runDb(db, 'UPDATE orchestration_jobs SET cancel_requested = 1, updated_at = ? WHERE id = ?', [nowSeconds(), jobId]);
     await runDb(db, `UPDATE orchestration_job_targets SET status = 'cancelled', finished_at = ? WHERE job_id = ? AND status = 'queued'`, [nowSeconds(), jobId]);

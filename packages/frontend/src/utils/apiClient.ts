@@ -34,7 +34,8 @@ apiClient.interceptors.response.use(
   },
   (error) => {
     // 处理响应错误
-    console.error('Response error:', error.response || error.message);
+    // Never log Axios response/config objects: they include request bodies and credentials.
+    console.error('API request failed:', error.response?.status || 'network error');
 
     if (error.response) {
       const { status } = error.response;
@@ -71,10 +72,10 @@ apiClient.interceptors.response.use(
       }
     } else if (error.request) {
       // 请求已发出，但没有收到响应 (例如网络问题)
-      console.error('Network error or no response received:', error.request);
+      console.error('Network error or no response received.');
     } else {
       // 发送请求时出了点问题
-      console.error('Error setting up request:', error.message);
+      console.error('Error setting up request.');
     }
 
     // 将错误继续抛出，以便调用方可以捕获并处理

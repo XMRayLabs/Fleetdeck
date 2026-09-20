@@ -142,6 +142,70 @@ const proxy = (req, res, port, headers) => {
   assert.equal(stored.username, 'root');
   assert.ok((await context.request.delete(origin + '/api/v1/connections/' + ipv6.id)).ok());
   console.log('PASS IPv6 create/update persisted canonically; username and port preserved');
+  // Real AI config/preview APIs; the model and execution boundaries are mocked for UI only.
+  await page.goto(origin + '/ai', { waitUntil: 'networkidle' });
+  await page.getByLabel('API base URL (include /v1 if required)', { exact: true }).fill('https://example.com/v1');
+  await page.getByLabel('Model ID', { exact: true }).fill('fixture-model');
+  await page.getByLabel('API Key', { exact: true }).fill('fixture-ui-key-not-real');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('status').filter({ hasText: 'Saved' }).waitFor();
+  await page.getByLabel('What should AI help with?', { exact: true }).fill('Analyze disk usage');
+  await page.getByLabel('Selected terminal text / logs', { exact: true }).fill('password=browser-test-secret\nTOKEN=browser-test-token\nFilesystem full');
+  await page.getByRole('button', { name: 'Preview redacted content', exact: true }).click();
+  const redactedPreview = page.getByTestId('ai-preview');
+  await redactedPreview.waitFor();
+  assert.ok(!(await redactedPreview.innerText()).includes('browser-test-secret'));
+  assert.ok(!(await redactedPreview.innerText()).includes('browser-test-token'));
+  const sendAi = page.getByRole('button', { name: 'Send to AI', exact: true });
+  assert.ok(await sendAi.isDisabled());
+  await page.route('**/api/v1/ai/analyze', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ analysis: '<img src=x onerror=alert(1)> Diagnose disk usage.', commands: ['df -h'], proposalId: null, targetIds: [] }) }));
+  await page.getByLabel('I have reviewed the content and approve sending it to this provider.', { exact: true }).check();
+  await sendAi.click();
+  await page.locator('.ai-analysis').waitFor();
+  assert.equal(await page.locator('.ai-analysis img').count(), 0, 'AI output must render as text, never HTML');
+  assert.equal(await page.getByRole('button', { name: 'Execute approved commands', exact: true }).count(), 0, 'Analysis-only must not allow execution');
+  await page.getByLabel('What should AI help with?', { exact: true }).fill('Updated task');
+  assert.equal(await page.locator('.ai-analysis').count(), 0, 'Editing inputs must invalidate proposals');
+  assert.ok(!(await page.evaluate(() => JSON.stringify(localStorage))).includes('browser-test-secret'));
+  await page.unroute('**/api/v1/ai/analyze');
+  const aiFixtureResponse = await context.request.post(origin + '/api/v1/connections', { data: {
+    name: 'ai-execution-fixture', type: 'SSH', host: '192.0.2.99', port: 22, username: 'operator', auth_method: 'password', credential_mode: 'prompt',
+  } });
+  assert.ok(aiFixtureResponse.ok());
+  const { connection: aiFixture } = await aiFixtureResponse.json();
+  await page.goto(origin + '/ai', { waitUntil: 'networkidle' });
+  await page.getByLabel('What should AI help with?', { exact: true }).fill('Check system');
+  await page.locator('.ai-server').filter({ hasText: 'ai-execution-fixture' }).getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Preview redacted content', exact: true }).click();
+  await page.getByTestId('ai-preview').waitFor();
+  await page.route('**/api/v1/ai/analyze', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ analysis: 'Inspect the OS.', commands: ['uname -a'], proposalId: 'ui-only-proposal', targetIds: [aiFixture.id] }) }));
+  await page.getByLabel('I have reviewed the content and approve sending it to this provider.', { exact: true }).check();
+  await page.getByRole('button', { name: 'Send to AI', exact: true }).click();
+  const executeAi = page.getByRole('button', { name: 'Execute approved commands', exact: true });
+  await executeAi.waitFor(); assert.ok(await executeAi.isDisabled());
+  await page.getByLabel('I approve these exact commands on the targets listed below.', { exact: true }).check();
+  await page.getByLabel(/ai-execution-fixture · Temporary password/).fill('ephemeral-fixture-secret');
+  let executedAi = false;
+  await page.route('**/api/v1/ai/execute', route => {
+    const body = route.request().postDataJSON();
+    assert.equal(body.proposalId, 'ui-only-proposal'); assert.equal(body.confirm, true);
+    assert.equal(body.ephemeralCredentials[aiFixture.id].password, 'ephemeral-fixture-secret');
+    assert.equal(body.commands, undefined); assert.equal(body.targetIds, undefined);
+    executedAi = true;
+    return route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ jobId: 'ui-only-job' }) });
+  });
+  await page.route('**/api/v1/ai/jobs/ui-only-job', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ job: { id: 'ui-only-job', status: 'success', targetCount: 1, completedCount: 1, targets: [{ id: 1, connectionName: 'ai-execution-fixture', status: 'success', exitCode: 0, stdout: 'Linux fixture' }] } }) }));
+  await executeAi.click();
+  await page.getByRole('heading', { name: '3 · Execution result · success' }).waitFor();
+  assert.ok(executedAi); assert.equal(await executeAi.count(), 0, 'Consumed approval must disappear');
+  await page.getByRole('button', { name: 'Use result for another analysis' }).click();
+  assert.ok((await page.getByLabel('Selected terminal text / logs', { exact: true }).inputValue()).includes('Linux fixture'));
+  assert.equal(await page.getByRole('button', { name: 'Send to AI', exact: true }).count(), 0, 'Follow-up must require a new preview');
+  for (const pattern of ['**/api/v1/ai/analyze', '**/api/v1/ai/execute', '**/api/v1/ai/jobs/ui-only-job']) await page.unroute(pattern);
+  await context.request.delete(origin + '/api/v1/connections/' + aiFixture.id);
+  console.log('PASS AI browser command review, execution consent, SSH-only temporary password, one-shot UI, result-to-new-preview workflow (mock execution)');
+  console.log('PASS AI browser: real config + redacted preview, explicit sending consent, text-only output, analysis-only execution guard, draft invalidation, no log localStorage');
+  await page.goto(origin, { waitUntil: 'networkidle' });
   const iconState = await page.evaluate(async () => {
     await document.fonts.ready;
     return [...document.querySelectorAll('.fd-overview-grid i')].map(icon => {
@@ -190,7 +254,7 @@ const proxy = (req, res, port, headers) => {
         get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
       }));
       await page.setViewportSize({ width, height: 960 });
-      for (const route of ['/', '/connections', '/orchestration', '/playbooks', '/proxies', '/notifications', '/audit-logs', '/settings', '/workspace']) {
+      for (const route of ['/', '/connections', '/orchestration', '/playbooks', '/proxies', '/notifications', '/audit-logs', '/settings', '/ai', '/workspace']) {
         await page.goto(origin + route, { waitUntil: 'networkidle' });
         assert.equal(page.url(), origin + route);
         const missingIcons = await page.evaluate(() => [...document.querySelectorAll('.fas,.far,.fab,.fa-solid,.fa-regular,.fa-brands')]

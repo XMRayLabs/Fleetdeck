@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue';
+import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
+import { useAuthStore } from '../stores/auth.store';
+import { setAiDraft } from '../utils/aiDraft';
 import { Terminal, ITerminalAddon, IDisposable } from 'xterm';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
 import { useAppearanceStore } from '../stores/appearance.store';
@@ -30,6 +34,14 @@ const unsubscribeFromWorkspaceEvent = useWorkspaceEventOff(); // +++ 获取事�
 const terminalRef = ref<HTMLElement | null>(null); // xterm 挂载点的引用 (内部容器)
 const terminalOuterWrapperRef = ref<HTMLElement | null>(null); // 最外层容器的引用，用于背景图
 let terminal: Terminal | null = null;
+const aiRouter = useRouter();
+const { t: aiT } = useI18n();
+const aiAuth = useAuthStore();
+function analyzeSelection() {
+  const id = Number(sessionStore.sessions.get(props.sessionId)?.connectionId);
+  setAiDraft(terminal?.getSelection() || '', Number.isInteger(id) && id > 0 ? [id] : [], aiAuth.user?.id || 0);
+  void aiRouter.push('/ai');
+}
 let fitAddon: FitAddon | null = null;
 let searchAddon: SearchAddon | null = null; // *** 添加 searchAddon 变量 ***
 let resizeObserver: ResizeObserver | null = null;
@@ -721,10 +733,12 @@ watchEffect(() => {
   <div ref="terminalOuterWrapperRef" class="terminal-outer-wrapper">
     <!-- xterm 实际挂载点 -->
     <div ref="terminalRef" class="terminal-inner-container"></div>
+    <button v-if="isActive" type="button" class="terminal-ai-action" @mousedown.prevent @click="analyzeSelection">{{ aiT('ai.selection') }}</button>
   </div>
 </template>
 
 <style scoped>
+.terminal-ai-action { position: absolute; top: 8px; right: 20px; z-index: 3; padding: 5px 10px; border: 1px solid var(--fd-line); border-radius: 8px; background: var(--fd-surface); color: var(--text-color); font-size: 12px; }
 .terminal-outer-wrapper {
   width: 100%;
   height: 100%;

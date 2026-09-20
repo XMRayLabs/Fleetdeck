@@ -115,6 +115,7 @@ const showDesktopSidebar = computed(() => showAppShell.value);
 const navigationItems = computed(() => [
   { to: '/', label: t('nav.dashboard'), icon: 'fa-solid fa-chart-pie' },
   { to: '/workspace', label: t('nav.terminal'), icon: 'fa-solid fa-terminal' },
+  { to: '/ai', label: t('ai.title'), icon: 'fa-solid fa-wand-magic-sparkles' },
   { to: '/connections', label: t('nav.connections'), icon: 'fa-solid fa-server' },
   { to: '/orchestration', label: t('nav.orchestration'), icon: 'fa-solid fa-layer-group' },
   { to: '/playbooks', label: t('nav.playbooks'), icon: 'fa-solid fa-book-open' },

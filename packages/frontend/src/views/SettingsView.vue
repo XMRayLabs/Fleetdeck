@@ -2,6 +2,7 @@
   <div class="p-4 bg-background text-foreground min-h-screen"> <!-- Outer container -->
     <div class="max-w-7xl mx-auto"> <!-- Inner container for max-width -->
       <!-- Tabs Navigation -->
+      <RouterLink to="/ai" class="inline-flex mb-4 text-primary font-medium">{{ $t('ai.config') }} →</RouterLink>
       <div class="fd-settings-tabs">
         <button
           v-for="tab in tabs"

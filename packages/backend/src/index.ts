@@ -30,6 +30,7 @@ for (const [targetName, fileVariable] of [
 
 import { getDbInstance } from './database/connection';
 import authRouter from './auth/auth.routes';
+import aiRouter from './ai/ai.routes';
 import connectionsRouter from './connections/connections.routes';
 import sftpRouter from './sftp/sftp.routes';
 import proxyRoutes from './proxies/proxies.routes';
@@ -139,6 +140,7 @@ const registerRoutes = (sessionMiddleware: RequestHandler): void => {
     app.use('/api/v1/proxies', proxyRoutes);
     app.use('/api/v1/tags', tagsRouter);
     app.use('/api/v1/settings', settingsRoutes);
+    app.use('/api/v1/ai', aiRouter);
     app.use('/api/v1/notifications', notificationRoutes);
     app.use('/api/v1/audit-logs', auditRoutes);
     app.use('/api/v1/command-history', commandHistoryRoutes);

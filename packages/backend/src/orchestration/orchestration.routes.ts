@@ -34,7 +34,7 @@ router.use(isAuthenticated);
 
 router.get('/jobs', async (request: Request, response: Response) => {
     try {
-        response.json({ jobs: await listJobs(Number(request.query.limit || 50)) });
+        response.json({ jobs: await listJobs(Number(request.query.limit || 50), request.session.userId) });
     } catch (error: any) {
         response.status(500).json({ message: error?.message || 'Failed to list jobs.' });
     }
@@ -42,7 +42,7 @@ router.get('/jobs', async (request: Request, response: Response) => {
 
 router.get('/jobs/:id', async (request: Request, response: Response) => {
     try {
-        const job = await getJobDetail(request.params.id);
+        const job = await getJobDetail(request.params.id, request.session.userId);
         if (!job) {
             response.status(404).json({ message: 'Job not found.' });
             return;
@@ -56,7 +56,7 @@ router.get('/jobs/:id', async (request: Request, response: Response) => {
 router.post('/jobs/command', async (request: Request, response: Response) => {
     try {
         const jobId = await createCommandJob(
-            request.body,
+            { ...request.body, redactOutput: false, redactedValues: undefined },
             request.session.userId || null,
             request.session.username,
         );

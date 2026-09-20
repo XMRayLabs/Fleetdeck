@@ -1,4 +1,5 @@
 import { createI18n, Composer } from 'vue-i18n';
+import { aiMessages } from './locales/ai';
 
 // 动态导入 locales 目录下的所有 .json 文件
 // 使用 { eager: true } 确保同步加载，因为 i18n 实例需要在应用初始化时就绪
@@ -14,6 +15,11 @@ for (const path in localeModules) {
   const locale = path.match(/.\/locales\/(.+)\.json$/)?.[1];
   if (locale) {
     messages[locale] = localeModules[path]; // 获取导入的 JSON 内容
+    const ai = aiMessages[locale as keyof typeof aiMessages];
+    if (ai) {
+      messages[locale].ai = ai;
+      messages[locale].ui.pages.AiAssistant = ai.description;
+    }
     availableLocales.push(locale);
   }
 }
