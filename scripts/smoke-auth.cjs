@@ -222,6 +222,37 @@ const proxy = (req, res, port, headers) => {
   assert.ok((await page.getByLabel('Selected terminal text / logs', { exact: true }).inputValue()).includes('Linux fixture'));
   assert.equal(await page.getByRole('button', { name: 'Send to AI', exact: true }).count(), 0, 'Follow-up must require a new preview');
   for (const pattern of ['**/api/v1/ai/analyze', '**/api/v1/ai/execute', '**/api/v1/ai/jobs/ui-only-job']) await page.unroute(pattern);
+  await page.locator('.ai-context-panel summary').filter({hasText:'Saved conversations'}).click();
+  await page.getByRole('button',{name:'Save encrypted conversation',exact:true}).click();
+  await page.getByRole('button',{name:'Load as history',exact:true}).waitFor();
+  const draftBefore=await page.getByLabel('What should AI help with?',{exact:true}).inputValue();
+  await page.locator('.fd-nav').getByRole('link',{name:'Monitoring',exact:true}).click();
+  await page.getByRole('button',{name:'AI assistant',exact:true}).click();
+  await page.locator('.fd-agent-dock').waitFor();
+  const dockBounds=await page.locator('.fd-agent-dock').boundingBox();const mainBounds=await page.locator('main.fd-console').boundingBox();
+  assert.ok(mainBounds.x+mainBounds.width<=dockBounds.x+2,'Desktop agent must not cover the main workspace');
+  assert.equal(await page.getByLabel('What should AI help with?',{exact:true}).inputValue(),draftBefore,'SPA navigation must retain conversation');
+  await page.locator('.fd-agent-dock-header button').click();
+  const monitorFixture={source:'https://monitor.example',fetchedAt:Date.now(),servers:[{id:7,name:'monitor-node',platform:'linux',lastActive:new Date().toISOString(),cpu:12,memoryUsed:1024,memoryTotal:4096,diskUsed:4096,diskTotal:8192,load1:0.1,load5:0.2,load15:0.3,netIn:1024,netOut:2048}]};
+  await page.route('**/api/v1/ai/context/monitor/snapshot',r=>r.fulfill({contentType:'application/json',body:JSON.stringify(monitorFixture)}));
+  await page.getByLabel('Public Nezha dashboard URL',{exact:true}).fill('https://monitor.example');
+  await page.locator('form').filter({has:page.getByLabel('Public Nezha dashboard URL',{exact:true})}).getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('monitor-node',{exact:true}).waitFor();
+  assert.ok((await page.locator('.monitor-table').innerText()).includes('12.0%'));
+  await page.getByLabel('ai-execution-fixture Device aliases',{exact:true}).fill('1号服务器');
+  await page.locator('.monitor-alias').filter({hasText:'ai-execution-fixture'}).getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByRole('button',{name:'Discuss with agent',exact:true}).click();
+  await page.getByLabel('What should AI help with?',{exact:true}).fill('1号服务器执行 uname -a');
+  await page.getByRole('button',{name:'Find devices mentioned in message',exact:true}).click();
+  await page.getByRole('button',{name:'Use these devices as scope',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Use these devices as scope',exact:true}).click();
+  assert.ok(await page.getByLabel('Include fresh monitoring snapshot',{exact:true}).isChecked());
+  assert.ok(await page.locator('.ai-server').filter({hasText:'ai-execution-fixture'}).getByRole('checkbox').isChecked());
+  await page.locator('.fd-agent-dock').evaluate(el=>{el.scrollTop=0;});
+  if(process.env.UI_SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.UI_SCREENSHOT_DIR,'1440-monitor-agent.png'),fullPage:true});
+  await page.locator('.fd-agent-dock-header button').click();
+  await page.unroute('**/api/v1/ai/context/monitor/snapshot');
+  console.log('PASS monitoring UI, aliases, agent dock and conversation retained across SPA navigation');
   await context.request.delete(origin + '/api/v1/connections/' + aiFixture.id);
   console.log('PASS AI browser command review, execution consent, SSH-only temporary password, one-shot UI, result-to-new-preview workflow (mock execution)');
   console.log('PASS AI browser: real config + redacted preview, explicit sending consent, text-only output, analysis-only execution guard, draft invalidation, no log localStorage');
@@ -274,7 +305,7 @@ const proxy = (req, res, port, headers) => {
         get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
       }));
       await page.setViewportSize({ width, height: 960 });
-      for (const route of ['/', '/connections', '/orchestration', '/playbooks', '/proxies', '/notifications', '/audit-logs', '/settings', '/ai', '/workspace']) {
+      for (const route of ['/', '/connections', '/orchestration', '/playbooks', '/proxies', '/notifications', '/audit-logs', '/settings', '/monitoring', '/ai', '/workspace']) {
         await page.goto(origin + route, { waitUntil: 'networkidle' });
         assert.equal(page.url(), origin + route);
         const missingIcons = await page.evaluate(() => [...document.querySelectorAll('.fas,.far,.fab,.fa-solid,.fa-regular,.fa-brands')]

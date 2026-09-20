@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { RouterLink, RouterView, useRoute } from 'vue-router';
 import ConsolePageHeader from './components/ConsolePageHeader.vue';
-import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick, computed, defineAsyncComponent } from 'vue';
+import { useAgentStore } from './stores/agent.store';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from './stores/auth.store';
 import { useDeviceDetection } from './composables/useDeviceDetection';
@@ -23,6 +24,17 @@ import { useDialogStore } from './stores/dialog.store';
 
 const { t } = useI18n();
 const authStore = useAuthStore();
+const route = useRoute();
+const agent = useAgentStore();
+const AgentView = defineAsyncComponent(() => import('./views/AiAssistantView.vue'));
+watch(() => route.path, path => { if (path === '/ai') agent.initialized = true; }, { immediate: true });
+watch(() => authStore.isAuthenticated, value => { if (!value) agent.reset(); });
+function resizeAgent(event: PointerEvent) {
+  const handle = event.currentTarget as HTMLElement; handle.setPointerCapture(event.pointerId);
+  const move = (e: PointerEvent) => { agent.width = Math.max(360, Math.min(window.innerWidth * .7, window.innerWidth - e.clientX)); };
+  const end = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', end); handle.removeEventListener('lostpointercapture', end); };
+  handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', end); handle.addEventListener('lostpointercapture', end);
+}
 const settingsStore = useSettingsStore();
 const appearanceStore = useAppearanceStore();
 const layoutStore = useLayoutStore();
@@ -39,7 +51,6 @@ const { isConfiguratorVisible: isFocusSwitcherVisible } = storeToRefs(focusSwitc
 const { isRdpModalOpen, rdpConnectionInfo, isVncModalOpen, vncConnectionInfo } = storeToRefs(sessionStore); // +++ 获取 RDP 和 VNC 状态 +++
 const { isMobile } = useDeviceDetection();
 
-const route = useRoute();
 const navRef = ref<HTMLElement | null>(null);
 const underlineRef = ref<HTMLElement | null>(null);
 const mobileMenuOpen = ref(false);
@@ -116,6 +127,7 @@ const navigationItems = computed(() => [
   { to: '/', label: t('nav.dashboard'), icon: 'fa-solid fa-chart-pie' },
   { to: '/workspace', label: t('nav.terminal'), icon: 'fa-solid fa-terminal' },
   { to: '/ai', label: t('ai.title'), icon: 'fa-solid fa-wand-magic-sparkles' },
+  { to: '/monitoring', label: t('ops.monitoring'), icon: 'fa-solid fa-chart-line' },
   { to: '/connections', label: t('nav.connections'), icon: 'fa-solid fa-server' },
   { to: '/orchestration', label: t('nav.orchestration'), icon: 'fa-solid fa-layer-group' },
   { to: '/playbooks', label: t('nav.playbooks'), icon: 'fa-solid fa-book-open' },
@@ -315,6 +327,7 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
         <div class="fd-breadcrumb"><RouterLink to="/">FleetDeck</RouterLink><span>/</span><strong>{{ currentPageTitle }}</strong></div>
       </div>
       <div class="flex items-center gap-2">
+        <button class="fd-icon-button" :title="t('ai.title')" :aria-label="t('ai.title')" :aria-expanded="agent.open" @click="agent.open ? agent.open = false : agent.show()"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></button>
         <RouterLink to="/settings" class="fd-icon-button" :aria-label="t('nav.settings')" :title="t('nav.settings')"><i class="fa-solid fa-gear" aria-hidden="true"></i></RouterLink>
         <button class="fd-icon-button" :aria-label="t('nav.customizeStyle')" :title="t('nav.customizeStyle')" @click="openStyleCustomizer"><i class="fa-solid fa-palette" aria-hidden="true"></i></button>
         <div class="fd-account"><i class="fa-solid fa-user" aria-hidden="true"></i><span>{{ authStore.loggedInUser }}</span></div>
@@ -327,12 +340,17 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
         <div class="fd-sidebar-footer"><button @click="handleLogout">{{ t('nav.logout') }}</button></div>
       </nav>
     </div>
-    <main :class="['fd-console', { 'fd-main-offset': showDesktopSidebar }]">
+    <main :class="['fd-console', { 'fd-main-offset': showDesktopSidebar, 'fd-with-agent': agent.open && route.path !== '/ai' }]" :style="{ '--agent-width': agent.width + 'px' }">
       <ConsolePageHeader v-if="showDesktopSidebar && !isWorkspaceRoute" :title="currentPageTitle" :description="t(`ui.pages.${String(route.name)}`)" />
       <div :class="{ 'fd-page-content': showDesktopSidebar && !isWorkspaceRoute }">
         <RouterView v-slot="{ Component }">
           <KeepAlive :include="['WorkspaceView', 'ConnectionsView']"><component :is="Component" /></KeepAlive>
         </RouterView>
+      </div>
+      <div v-if="authStore.isAuthenticated && (agent.initialized || route.path === '/ai')" v-show="route.path === '/ai' || agent.open" :class="route.path !== '/ai' ? 'fd-agent-dock' : 'fd-agent-full'" :style="{ '--agent-width': agent.width + 'px' }">
+        <div v-if="route.path !== '/ai'" class="fd-agent-resize" role="separator" aria-orientation="vertical" :aria-label="t('ops.resize')" tabindex="0" @pointerdown="resizeAgent" @keydown.left.prevent="agent.width = Math.min(800, agent.width + 20)" @keydown.right.prevent="agent.width = Math.max(360, agent.width - 20)"></div>
+        <div v-if="route.path !== '/ai'" class="fd-agent-dock-header"><strong>{{ t('ai.title') }}</strong><button class="fd-icon-button" :aria-label="t('common.close')" @click="agent.open = false">×</button></div>
+        <AgentView :key="authStore.user?.id" />
       </div>
     </main>
 
@@ -382,6 +400,17 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
 </template>
 
 <style scoped>
+.fd-topbar>div:first-child{min-width:0;flex:1}.fd-topbar>div:last-child{flex-shrink:0}.fd-breadcrumb{min-width:0;overflow:hidden}.fd-breadcrumb strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:600px){.fd-breadcrumb>a,.fd-breadcrumb>span{display:none}}
+.fd-agent-dock{position:fixed;right:0;top:64px;bottom:0;z-index:40;overflow:auto;padding:14px;box-sizing:border-box;background:var(--fd-subtle);border-left:1px solid var(--fd-line);box-shadow:-8px 0 24px #0001;width:var(--agent-width)}
+.fd-agent-full{padding:0 32px 40px}.fd-with-agent{width:calc(100% - var(--agent-width))}
+@media(max-width:900px){.fd-agent-dock{width:100vw}.fd-with-agent{width:100%}.fd-agent-full{padding:0 16px 24px}.fd-agent-resize{display:none}}
+.fd-agent-resize{position:fixed;top:64px;bottom:0;width:6px;cursor:ew-resize;touch-action:none;margin-left:-17px}
+.fd-agent-dock-header{display:flex;align-items:center;justify-content:space-between;margin:-14px -14px 12px;padding:12px 14px;position:sticky;top:-14px;z-index:2;background:var(--fd-surface);border-bottom:1px solid var(--fd-line)}
+.fd-agent-dock :deep(.ai-workbench),.fd-agent-dock :deep(.ai-config){grid-template-columns:1fr}
+.fd-agent-dock :deep(.ai-context-panel){grid-row:1}
+.fd-agent-dock :deep(.ai-card),.fd-agent-dock :deep(.ai-transcript),.fd-agent-dock :deep(.ai-composer-shell){padding:14px}
+.fd-agent-dock :deep(.ai-server-list){max-height:140px}
 #app-container {
   display: flex;
   flex-direction: column;

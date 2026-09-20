@@ -64,7 +64,7 @@ let server; let database;
 (async () => {
   const dns = require('node:dns/promises'); const https = require('node:https'); const { EventEmitter } = require('node:events');
   const originalLookup = dns.lookup; const originalRequest = https.request;
-  let records = [{ address: '127.0.0.1', family: 4 }]; let calls = 0; let status = 200; let oversized = false; let listing = false;
+  let records = [{ address: '127.0.0.1', family: 4 }]; let calls = 0; let status = 200; let oversized = false; let listing = false; let streamFixture=false;let streamDone=true;
   dns.lookup = async () => records;
   https.request = (url, options, callback) => {
     calls++;
@@ -79,8 +79,10 @@ let server; let database;
       if (listing) assert.equal(body, undefined); else assert.equal(JSON.parse(body).messages.length, 2);
       queueMicrotask(() => {
         const response = new EventEmitter(); response.statusCode = status;
+        if(streamFixture)response.headers={'content-type':'text/event-stream'};
         callback(response);
-        response.emit('data', Buffer.from(oversized ? 'x'.repeat(256001) : JSON.stringify(listing ? { data: [{ id: 'fixture-chat' }] } : { choices: [{ message: { content: 'fixture' } }] })));
+        if(streamFixture){const wire=Buffer.from('data: '+JSON.stringify({choices:[{delta:{content:'服务器'}}]})+'\n\n'+(streamDone?'data: [DONE]\n\n':''));for(let i=0;i<wire.length;i+=2)response.emit('data',wire.subarray(i,i+2));}
+        else response.emit('data', Buffer.from(oversized ? 'x'.repeat(256001) : JSON.stringify(listing ? { data: [{ id: 'fixture-chat' }] } : { choices: [{ message: { content: 'fixture' } }] })));
         response.emit('end'); req.emit('close');
       });
     };
@@ -100,7 +102,12 @@ let server; let database;
     assert.equal((await realDiscoverModels('https://fixture.example/v1', 'key')).suggestedModel, 'fixture-chat');
     records = [{ address: '127.0.0.1', family: 4 }];
     await assert.rejects(realDiscoverModels('https://fixture.example/v1', 'key'));
-    console.log('PASS AI transport: private/mixed DNS blocked, DNS pinned, redirects rejected, oversized response rejected');
+    records=[{address:'8.8.8.8',family:4}];listing=false;oversized=false;status=200;streamFixture=true;let partial='';
+    assert.equal(await realAskProvider('https://fixture.example/v1','key','model','logs',{onDelta:text=>{partial=text;}}),'服务器');assert.equal(partial,'服务器');
+    streamDone=false;await assert.rejects(realAskProvider('https://fixture.example/v1','key','model','logs',{onDelta:()=>{}}));
+    const abort=new AbortController();abort.abort();await assert.rejects(realAskProvider('https://fixture.example/v1','key','model','logs',{signal:abort.signal}));
+    streamFixture=false;
+    console.log('PASS AI transport: private/mixed DNS blocked, DNS pinned, redirects rejected, oversized response rejected; UTF-8 streaming, incomplete stream rejection, abort');
   } finally { dns.lookup = originalLookup; https.request = originalRequest; }
   database = await dbApi.getDbInstance();
   await dbApi.runDb(database, 'INSERT INTO users (id,username,hashed_password) VALUES (1,?,?)', ['fixture', 'not-a-login-hash']);
@@ -168,6 +175,19 @@ let server; let database;
   assert.equal((await call('POST', '/execute', { proposalId: answer2.proposalId, confirm: true })).status, 400);
   const events = await call('GET', '/events');
   assert.ok(!JSON.stringify(events).includes('diagnose')); assert.ok(!JSON.stringify(events).includes(quoted));
+  let planId;
+  for(let round=0;round<5;round++){
+    const p=(await call('POST','/preview',{task:'health',context:'',targetIds:[1],planId})).body;assert.ok(p.previewId);planId=p.planId;
+    const a=(await call('POST','/analyze',{previewId:p.previewId,confirm:true})).body;assert.ok(a.proposalId);
+    assert.equal((await call('POST','/execute',{proposalId:a.proposalId,confirm:true})).status,202);
+  }
+  assert.equal((await call('POST','/preview',{task:'sixth round',context:'',targetIds:[1],planId})).status,400);
+  assert.equal((await call('POST','/preview',{task:'change scope',context:'',targetIds:[],planId})).status,400);
+  assert.equal((await call('POST','/preview',{task:'other owner',context:'',targetIds:[1],planId},3)).status,400);
+  const ssePreview=(await call('POST','/preview',{task:'stream',context:'',targetIds:[]})).body;
+  const sse=await fetch(url+'/analyze',{method:'POST',headers:{'fixture-user':'1','Content-Type':'application/json',Accept:'text/event-stream'},body:JSON.stringify({previewId:ssePreview.previewId,confirm:true})});
+  assert.equal(sse.headers.get('content-type'),'text/event-stream');const wire=await sse.text();assert.ok(wire.includes('"type":"result"'));assert.ok(!wire.includes('do-not-display'));
+  console.log('PASS diagnostic plan round/scope/owner limits and redacted SSE result delivery');
   assert.equal((await call('DELETE', '/config')).status, 200);
   assert.equal((await call('GET', '/config')).body.hasKey, false);
   // AI job ownership must hold through the general orchestration API as well.
@@ -179,6 +199,45 @@ let server; let database;
   assert.equal((await originalJobs.list(50, 1)).length, 1);
   assert.equal(await originalJobs.cancel('private-ai-job', 2), false);
   console.log('PASS AI ownership also enforced on shared orchestration job services');
+  const resources = require(path.join(root,'ai/resources'));
+  assert.equal(resources.monitorUrl('tz.example.com'),'https://tz.example.com');
+  for(const value of ['http://example.com','https://u:p@example.com','https://example.com?q=secret','https://example.com:80'])assert.throws(()=>resources.monitorUrl(value));
+  const nodes=resources.normalizeTelemetry({servers:[{id:7,name:'node',public_note:'not-for-ai',host:{mem_total:100},state:{cpu:1,mem_used:20}}]});
+  assert.equal(nodes[0].cpu,1);assert.ok(!JSON.stringify(nodes).includes('not-for-ai'));assert.equal(nodes[0].diskTotal,null);
+  assert.equal((await call('GET','/context/inventory',null,0)).status,401);
+  assert.equal((await call('PUT','/context/aliases/1',{aliases:['1号服务器','db-one']})).status,200);
+  const devices=(await call('GET','/context/inventory')).body;
+  assert.deepEqual(devices[0].aliases,['1号服务器','db-one']);
+  assert.equal((await call('GET','/context/inventory',null,2)).body[0].aliases.length,0);
+  assert.equal(resources.matchDevices('1号服务器执行 df -h',devices).matches[0].id,1);
+  assert.equal(resources.matchDevices('11号服务器执行 df -h',devices).matches.length,0);
+  assert.equal(resources.matchDevices('db-one', [...devices,{...devices[0],id:2}]).ambiguous,true);
+  assert.equal((await call('POST','/context/resolve',{task:'db-one status'})).body.matches[0].id,1);
+  assert.equal((await call('PUT','/context/monitor',{url:'https://example.com'})).status,200);
+  assert.equal((await call('GET','/context/monitor')).body.url,'https://example.com');
+  assert.equal((await call('GET','/context/monitor',null,2)).body.url,'');
+  // Public network boundary only: no request to the real monitoring server in this suite.
+  const dns2=require('node:dns/promises');const oldLookup=dns2.lookup;dns2.lookup=async()=>[{address:'127.0.0.1',family:4}];
+  try{await assert.rejects(resources.readNezha('https://fixture.example'));}finally{dns2.lookup=oldLookup;}
+  await dbApi.runDb(database,'INSERT INTO ai_monitor_bindings VALUES (?,?,?)',[1,7,1]);
+  await call('PUT','/context/monitor',{url:'https://different.example'});
+  assert.equal((await call('GET','/context/inventory')).body[0].monitorNodeId,null);
+  const chat=(await call('POST','/context/conversations',{title:'password=title-secret',targetIds:[1],turns:[{task:'diagnose',analysis:quoted,commands:['df -h'],result:'token=result-secret'}]})).body;
+  assert.ok(chat.id);
+  const chatRow=await dbApi.getDb(database,'SELECT * FROM ai_conversations WHERE id=?',[chat.id]);
+  assert.equal(chatRow.title,'Conversation');assert.ok(!chatRow.encrypted_body.includes('diagnose'));
+  const chatPlain=JSON.parse(decrypt(chatRow.encrypted_body));assert.ok(!JSON.stringify(chatPlain).includes('result-secret'));assert.ok(!chatPlain.turns[0].analysis.includes(quoted));
+  assert.equal((await call('GET','/context/conversations/'+chat.id,null,2)).status,400);
+  assert.equal((await call('GET','/context/conversations',null,2)).body.length,0);
+  await call('DELETE','/context/conversations/'+chat.id,null,2);assert.equal((await call('GET','/context/conversations/'+chat.id)).status,200);
+  await call('DELETE','/context/conversations/'+chat.id);assert.equal((await call('GET','/context/conversations/'+chat.id)).status,400);
+  const {redactLive,liveAnalysis}=require(path.join(root,'ai/redact'));
+  const longSecret='sensitive '.repeat(150);const output='safe line\npassword="'+longSecret+'\ncontinued secret';
+  for(let i=1;i<output.length;i+=17)assert.ok(!redactLive(output.slice(0,i)).includes('sensitive'));
+  const split='safe line\n'+quoted+'\n'+'normal line\n'.repeat(100);
+  for(let i=1;i<split.length;i+=13)assert.ok(!redactLive(split.slice(0,i),[quoted]).includes(quoted));
+  assert.ok(liveAnalysis(JSON.stringify({analysis:'safe\n'.repeat(200),commands:[]}),[]).includes('safe'));
+  console.log('PASS Nezha address/field policy, alias resolution/ambiguity, user isolation, binding reset, encrypted conversations, deletion and split-stream redaction');
   console.log('PASS AI routes: encrypted config, authentication/2FA, redacted preview, dual confirmations, ownership, immutable targets/commands, replay denial, configuration invalidation, output redaction, cancellation and metadata-only history');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   if (server) await new Promise(resolve => server.close(resolve));

@@ -3,7 +3,8 @@ import { useAuthStore } from '../stores/auth.store'; // 导入 Auth Store
 
 // 路由配置
 const routes: Array<RouteRecordRaw> = [
-  { path: '/ai', name: 'AiAssistant', component: () => import('../views/AiAssistantView.vue') },
+  { path: '/ai', name: 'AiAssistant', component: { render: () => null } },
+  { path: '/monitoring', name: 'Monitoring', component: () => import('../views/MonitoringView.vue') },
   // 首页/仪表盘 (占位符)
   {
     path: '/',

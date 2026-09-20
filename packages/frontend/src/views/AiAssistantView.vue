@@ -5,8 +5,16 @@ import api from '../utils/apiClient';
 import { takeAiDraft } from '../utils/aiDraft';
 import { useAuthStore } from '../stores/auth.store';
 import type { ConnectionInfo } from '../stores/connections.store';
+import { useAgentStore } from '../stores/agent.store';
+import { useSessionStore } from '../stores/session.store';
+import { analyzeStream } from '../utils/agentStream';
 
 const { t } = useI18n();
+const agent = useAgentStore(); const sessions = useSessionStore();
+const includeMonitor = ref(false); const includeInventory = ref(false);
+const streamingText=ref('');const generating=ref(false);let generation:AbortController|undefined;
+const planId=ref<string|undefined>();const autoReview=ref(false);const rounds=ref(0);
+const matches = ref<any[]>([]); const ambiguous = ref(false); const savedChats = ref<any[]>([]);
 const draft = takeAiDraft(useAuthStore().user?.id || 0);
 const task = ref('');
 const context = ref(draft?.context || '');
@@ -18,11 +26,11 @@ const models = ref<string[]>([]); const modelsError = ref(''); const manualModel
 const scopeOpen = ref(window.innerWidth > 1000);
 const savedBase = ref(''); const savedModel = ref('');
 const configDirty = computed(() => base.value !== savedBase.value || model.value !== savedModel.value || Boolean(apiKey.value));
-const turns = ref<{ task: string; analysis: string; commands: string[]; model: string }[]>([]);
+const turns = ref<{ task: string; analysis: string; commands: string[]; model: string; result?: string }[]>([]);
 const currentTask = ref(''); const currentModel = ref(''); const threadEnd = ref<HTMLElement | null>(null);
 const agentState = computed(() => busy.value ? t('ai.working') : activeJob.value ? t('agent.running') : answer.value?.proposalId ? t('agent.approval') : t('agent.ready'));
 const configOpen = ref(false); const busy = ref(false); const message = ref(''); const error = ref('');
-const preview = ref<{ previewId: string; content: string; base: string; model: string } | null>(null);
+const preview = ref<{ previewId: string; content: string; base: string; model: string; planId?:string } | null>(null);
 const answer = ref<{ analysis: string; commands: string[]; proposalId: string | null; targetIds: number[] } | null>(null);
 const sendConsent = ref(false); const executeConsent = ref(false);
 const passwords = ref<Record<number, string>>({});
@@ -36,10 +44,20 @@ const promptTargets = computed(() => targets.value.filter(c => c.credential_mode
 const activeJob = computed(() => ['queued', 'running'].includes(job.value?.status));
 
 function invalidate() {
-  if (answer.value) turns.value = [...turns.value, { task: currentTask.value, analysis: answer.value.analysis, commands: answer.value.commands, model: currentModel.value }].slice(-6);
+  if (answer.value) turns.value = [...turns.value, { task: currentTask.value, analysis: answer.value.analysis, commands: answer.value.commands, model: currentModel.value, result: job.value ? JSON.stringify(job.value).slice(0,32000) : '' }].slice(-6);
   preview.value = null; answer.value = null; sendConsent.value = false; executeConsent.value = false; passwords.value = {};
 }
 watch([task, context, selected], invalidate, { deep: true });
+watch(task,()=>{matches.value=[];ambiguous.value=false;});
+watch(selected,()=>{planId.value=undefined;rounds.value=0;},{deep:true});
+watch([includeMonitor, includeInventory], invalidate);
+watch(()=>agent.open,open=>{if(open)scopeOpen.value=false;},{immediate:true});
+watch([()=>agent.attachment,busy], ([value,isBusy])=>{
+ if (!value || isBusy) return;
+ if ((context.value || selected.value.some(id=>id!==value.connectionId)) && !window.confirm(t('ops.switchScope'))) {agent.attachment=null;return;}
+ selected.value=[value.connectionId]; context.value=value.text; agent.attachment=null;
+}, {immediate:true});
+watch(()=>agent.monitorRequest, value=>{if(value){includeMonitor.value=true;includeInventory.value=true;if(!task.value)task.value=t('ops.askMonitor');}}, {immediate:true});
 watch([base, model, apiKey], invalidate);
 watch(base, () => { models.value = []; modelsError.value = ''; });
 watch(apiKey, value => { if (value) { models.value = []; modelsError.value = ''; } });
@@ -53,16 +71,25 @@ async function readModels() {
   } catch (e: any) { modelsError.value = e.response?.data?.message || t('agent.modelsFailed'); }
 }
 function refreshModels() { void run(readModels); }
+function capture(kind:'selection'|'recent') { if (!sessions.activeSessionId || !agent.capture(sessions.activeSessionId,kind)) error.value=t('ops.noTerminal'); }
+async function refreshConnections(){connections.value=(await api.get<ConnectionInfo[]>('/connections',{signal:controller.signal})).data.filter(c=>c.type==='SSH');}
+function resolveDevices() { void run(async()=>{ await refreshConnections();const data=(await api.post('/ai/context/resolve',{task:task.value})).data;matches.value=data.matches;ambiguous.value=data.ambiguous; }); }
+function useMatches() { selected.value=matches.value.map(d=>d.id); matches.value=[]; scopeOpen.value=true; }
+async function listChats() {savedChats.value=(await api.get('/ai/context/conversations',{signal:controller.signal})).data;}
+function saveChat() {void run(async()=>{invalidate();await api.post('/ai/context/conversations',{title:turns.value[0]?.task.slice(0,150)||'Conversation',turns:turns.value,targetIds:selected.value});await listChats();message.value=t('ai.saved');});}
+function loadChat(id:string) {if(!window.confirm(t('ops.switchScope')))return;void run(async()=>{const data=(await api.get('/ai/context/conversations/'+id)).data;invalidate();turns.value=data.turns.slice(-6);task.value='';context.value='';job.value=null;clearTimeout(poll);selected.value=data.targetIds.filter((id:number)=>connections.value.some(c=>c.id===id));});}
+function deleteChat(id:string) {if(!window.confirm(t('ops.deleteConfirm')))return;void run(async()=>{await api.delete('/ai/context/conversations/'+id);await listChats();});}
 function newConversation() {
   if (!window.confirm(t('agent.clearConfirm'))) return;
   invalidate(); turns.value = []; task.value = ''; context.value = ''; currentTask.value = ''; job.value = null;
+  planId.value=undefined;rounds.value=0;matches.value=[];
   clearTimeout(poll);
 }
 async function run(action: () => Promise<void>) {
   if (busy.value) return;
   busy.value = true; error.value = ''; message.value = '';
   try { await action(); }
-  catch (e: any) { if (!disposed) error.value = e.response?.data?.message || t('ai.failed'); }
+  catch (e: any) { if (!disposed) error.value = e.response?.data?.message || (e.name==='AbortError' ? t('ai.cancelled') : t('ai.failed')); }
   finally { busy.value = false; }
 }
 async function loadConfig() {
@@ -87,30 +114,37 @@ function deleteConfig() {
 }
 function makePreview() { void run(async () => {
   if (configDirty.value) { error.value = t('agent.saveFirst'); return; }
+  await refreshConnections();
+  if(selected.value.some(id=>!connections.value.some(c=>c.id===id))){error.value=t('ai.failed');return;}
   invalidate();
-  const history = turns.value.flatMap(turn => [{ role: 'user', content: turn.task.slice(0, 3500) }, { role: 'assistant', content: turn.analysis.slice(0, 3500) }]);
-  preview.value = (await api.post('/ai/preview', { task: task.value, context: context.value, targetIds: selected.value, history }, { signal: controller.signal })).data;
+  const history = turns.value.flatMap(turn => [{ role: 'user', content: turn.task.slice(0, 1000) }, { role: 'assistant', content: JSON.stringify({analysis:turn.analysis.slice(0,1800),commands:turn.commands.map(c=>c.slice(0,100)).slice(0,8),result:turn.result?.slice(-1200)}).slice(0,6000) }]);
+  preview.value = (await api.post('/ai/preview', { task: task.value, context: context.value, targetIds: selected.value, history, includeInventory:includeInventory.value, includeMonitor:includeMonitor.value,planId:planId.value }, { signal: controller.signal })).data;
+  planId.value=preview.value?.planId;if(!activeJob.value){job.value=null;clearTimeout(poll);}
   currentTask.value = JSON.parse(preview.value!.content).task; currentModel.value = preview.value!.model;
   await scrollThread();
 }); }
 function analyze() { if (!preview.value || !sendConsent.value) return; void run(async () => {
   const id = preview.value!.previewId;
+  generation=new AbortController();generating.value=true;streamingText.value='';
   try {
-    const result = (await api.post('/ai/analyze', { previewId: id, confirm: true }, { timeout: 70000, signal: controller.signal })).data;
+    const result = await analyzeStream(id,generation.signal,text=>{streamingText.value=text;});
     task.value = ''; context.value = ''; await nextTick();
     answer.value = result;
   }
-  finally { preview.value = null; sendConsent.value = false; }
+  finally { preview.value = null; sendConsent.value = false;generating.value=false;streamingText.value='';generation=undefined; }
   await loadEvents(); await scrollThread();
 }); }
+function stopGeneration(){generation?.abort();void api.post('/ai/cancel').catch(()=>{});}
 async function refreshJob(id: string) {
   clearTimeout(poll);
   const result = await api.get('/ai/jobs/' + encodeURIComponent(id), { signal: controller.signal });
   if (disposed) return;
+  const wasRunning=activeJob.value;
   job.value = result.data.job;
+  if(wasRunning && !activeJob.value && autoReview.value && rounds.value<5) follow();
   if (activeJob.value) poll = setTimeout(() => {
     void refreshJob(id).catch(() => { if (!disposed) error.value = t('ai.failed'); });
-  }, 5000);
+  }, 2500);
 }
 function execute() { if (!answer.value?.proposalId || !executeConsent.value) return; void run(async () => {
   const ephemeralCredentials: Record<string, { password?: string; passphrase?: string }> = {};
@@ -122,19 +156,20 @@ function execute() { if (!answer.value?.proposalId || !executeConsent.value) ret
   let id: string;
   try { id = (await api.post('/ai/execute', { proposalId: answer.value!.proposalId, confirm: true, ephemeralCredentials })).data.jobId; }
   finally { passwords.value = {}; if (answer.value) answer.value.proposalId = null; executeConsent.value = false; }
-  await loadEvents(); await refreshJob(id);
+  rounds.value++;await loadEvents(); await refreshJob(id);
+  if(!activeJob.value && autoReview.value && rounds.value<5)follow();
 }); }
 function stop() { void run(async () => { await api.post('/ai/jobs/' + encodeURIComponent(job.value.id) + '/cancel'); message.value = t('ai.cancelled'); await refreshJob(job.value.id); }); }
-function follow() { context.value = JSON.stringify(job.value, null, 2).slice(0, 64000); invalidate(); }
+function follow() { context.value = JSON.stringify(job.value, null, 2).slice(0, 64000); task.value=t('ops.reviewResult'); invalidate(); }
 onMounted(() => { void run(async () => {
   await loadConfig();
   await nextTick();
   if (hasKey.value) await readModels();
   connections.value = (await api.get<ConnectionInfo[]>('/connections', { signal: controller.signal })).data.filter(c => c.type === 'SSH');
   selected.value = selected.value.filter(id => connections.value.some(c => c.id === id));
-  await loadEvents();
+  await loadEvents(); await listChats();
 }); });
-onBeforeUnmount(() => { disposed = true; controller.abort(); clearTimeout(poll); context.value = ''; apiKey.value = ''; passwords.value = {}; });
+onBeforeUnmount(() => { disposed = true; controller.abort();generation?.abort(); clearTimeout(poll); context.value = ''; apiKey.value = ''; passwords.value = {}; });
 </script>
 
 <template>
@@ -142,6 +177,8 @@ onBeforeUnmount(() => { disposed = true; controller.abort(); clearTimeout(poll);
     <p v-if="error" role="alert" class="ai-notice ai-error">{{ error }}</p>
     <p v-if="message" role="status" class="ai-notice">{{ message }}</p>
     <p v-if="busy" role="status">{{ t('ai.working') }}</p>
+    <button v-if="generating" @click="stopGeneration">{{ t('ai.stop') }}</button>
+    <pre v-if="streamingText" class="ai-output" aria-live="polite">{{ streamingText }}</pre>
     <details :open="configOpen" class="ai-card" @toggle="configOpen = ($event.target as HTMLDetailsElement).open">
       <summary>{{ t('ai.config') }}</summary>
       <form @submit.prevent="saveConfig">
@@ -211,18 +248,26 @@ onBeforeUnmount(() => { disposed = true; controller.abort(); clearTimeout(poll);
       </div>
       <form class="ai-composer-shell" @submit.prevent="makePreview">
         <fieldset :disabled="busy" class="ai-inputs">
+          <div class="ai-actions"><button type="button" @click="capture('selection')">{{ t('ops.selection') }}</button><button type="button" @click="capture('recent')">{{ t('ops.recent') }}</button></div>
           <label>{{ t('ai.task') }}<textarea v-model="task" :placeholder="t('agent.composer')" rows="3" maxlength="8000" @keydown.ctrl.enter.prevent="hasKey && task.trim() && makePreview()" @keydown.meta.enter.prevent="hasKey && task.trim() && makePreview()" /></label>
           <details :open="Boolean(context)"><summary>{{ t('agent.attach') }} <span v-if="context" class="ai-count">{{ context.length }}</span></summary>
             <label>{{ t('ai.logs') }}<textarea v-model="context" rows="5" maxlength="64000" spellcheck="false" class="ai-code" /></label>
             <p class="ai-muted">{{ t('ai.contextHint') }}</p>
           </details>
+          <label class="ai-check"><input v-model="includeInventory" type="checkbox" />{{ t('ops.includeInventory') }}</label>
+          <label class="ai-check"><input v-model="includeMonitor" type="checkbox" />{{ t('ops.includeMonitor') }}</label>
+          <label class="ai-check"><input v-model="autoReview" type="checkbox" />{{ t('ops.autoReview') }}</label>
+          <p class="ai-muted">{{ t('ops.limits') }} · {{ rounds }}/5</p>
+          <button type="button" :disabled="!task.trim()" @click="resolveDevices">{{ t('ops.resolve') }}</button>
+          <div v-if="matches.length"><p v-if="ambiguous" role="alert">{{ t('ops.ambiguous') }}</p><p v-for="d in matches" :key="d.id">{{ d.name }} · {{ d.host }} · {{ d.aliases.join(', ') }}</p><button v-if="!ambiguous" type="button" @click="useMatches">{{ t('ops.useMatches') }}</button></div>
           <p v-if="configDirty" class="ai-muted">{{ t('agent.saveFirst') }}</p>
           <div class="ai-composer-footer"><span class="ai-muted">{{ savedModel || t('agent.auto') }} · {{ selected.length ? selected.length + ' SSH' : t('agent.noScope') }}</span><button type="submit" class="ai-primary" :disabled="!hasKey || !task.trim() || configDirty">{{ t('ai.preview') }}</button></div>
-          <p class="ai-muted">{{ t('agent.history') }}</p>
+          <p class="ai-muted">{{ t('ops.persisted') }}</p>
         </fieldset>
       </form>
     </main>
     <aside class="ai-context-panel">
+      <details class="ai-card"><summary>{{ t('ops.savedChats') }}</summary><button :disabled="busy || activeJob || (!turns.length && !answer)" @click="saveChat">{{ t('ops.saveChat') }}</button><div v-for="chat in savedChats" :key="chat.id" class="ai-event"><span>{{ chat.title }} · {{ new Date(chat.updated_at).toLocaleString() }}</span><button :disabled="busy || activeJob" @click="loadChat(chat.id)">{{ t('ops.loadChat') }}</button><button :disabled="busy" @click="deleteChat(chat.id)">{{ t('ops.deleteChat') }}</button></div></details>
       <details class="ai-card ai-scope" :open="scopeOpen" @toggle="scopeOpen = ($event.target as HTMLDetailsElement).open">
       <summary>{{ t('agent.scope') }} <span class="ai-count">{{ selected.length }}</span></summary>
       <fieldset :disabled="busy" class="ai-targets">

@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue';
-import { useRouter } from 'vue-router';
+import { registerAgentTerminal, useAgentStore } from '../stores/agent.store';
 import { useI18n } from 'vue-i18n';
-import { useAuthStore } from '../stores/auth.store';
-import { setAiDraft } from '../utils/aiDraft';
 import { Terminal, ITerminalAddon, IDisposable } from 'xterm';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
 import { useAppearanceStore } from '../stores/appearance.store';
@@ -34,14 +32,25 @@ const unsubscribeFromWorkspaceEvent = useWorkspaceEventOff(); // +++ 获取事�
 const terminalRef = ref<HTMLElement | null>(null); // xterm 挂载点的引用 (内部容器)
 const terminalOuterWrapperRef = ref<HTMLElement | null>(null); // 最外层容器的引用，用于背景图
 let terminal: Terminal | null = null;
-const aiRouter = useRouter();
+const aiPanel = useAgentStore();
 const { t: aiT } = useI18n();
-const aiAuth = useAuthStore();
 function analyzeSelection() {
-  const id = Number(sessionStore.sessions.get(props.sessionId)?.connectionId);
-  setAiDraft(terminal?.getSelection() || '', Number.isInteger(id) && id > 0 ? [id] : [], aiAuth.user?.id || 0);
-  void aiRouter.push('/ai');
+  aiPanel.capture(props.sessionId, 'selection');
 }
+let removeAgentReader: (() => void) | undefined;
+onMounted(() => {
+  removeAgentReader = registerAgentTerminal(props.sessionId, {
+    connectionId: Number(sessionStore.sessions.get(props.sessionId)?.connectionId),
+    selection: () => terminal?.getSelection() || '',
+    recent: () => {
+      const buffer = terminal?.buffer.active; if (!buffer) return '';
+      const end = buffer.baseY + buffer.cursorY + 1; const lines = [];
+      for (let i = Math.max(0, end - 120); i < end; i++) lines.push(buffer.getLine(i)?.translateToString(true) || '');
+      return lines.join('\n');
+    },
+  });
+});
+onBeforeUnmount(() => removeAgentReader?.());
 let fitAddon: FitAddon | null = null;
 let searchAddon: SearchAddon | null = null; // *** 添加 searchAddon 变量 ***
 let resizeObserver: ResizeObserver | null = null;

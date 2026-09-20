@@ -6,7 +6,7 @@ import { allDb, getDb, getDbInstance, runDb } from '../database/connection';
 import { decrypt, encrypt } from '../utils/crypto';
 import * as SshService from '../services/ssh.service';
 import { AuditLogService } from '../audit/audit.service';
-import { redact as redactAiOutput } from '../ai/redact';
+import { redact as redactAiOutput, redactLive } from '../ai/redact';
 
 export type JobStatus = 'queued' | 'running' | 'success' | 'partial' | 'failed' | 'cancelled';
 export type TargetStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled';
@@ -134,6 +134,7 @@ type JobPayload = CommandPayload | UploadPayload | PlaybookPayload;
 
 const auditLogService = new AuditLogService();
 const activeClients = new Map<string, Set<Client>>();
+const liveOutputs = new Map<number, {stdout:string;stderr:string}>();
 const activeJobs = new Set<string>();
 const jobCredentials = new Map<string, Map<number, SshService.EphemeralCredentials>>();
 // Playbook variables can contain passwords or tokens. Keep every supplied value
@@ -401,6 +402,7 @@ const execScript = (
     commands: string[],
     stopOnError: boolean,
     timeoutMs: number,
+    onOutput?: (stdout:string,stderr:string)=>void,
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> => new Promise((resolve, reject) => {
     const script = `${stopOnError ? 'set -e\n' : ''}${commands.join('\n')}`;
     let settled = false;
@@ -425,8 +427,10 @@ const execScript = (
             return;
         }
         streamRef = stream;
-        stream.on('data', (data: Buffer) => appendLimited(stdoutChunks, Buffer.from(data), stdoutState));
-        stream.stderr.on('data', (data: Buffer) => appendLimited(stderrChunks, Buffer.from(data), stderrState));
+        let lastUpdate=0;
+        const publish=()=>{if(onOutput && Date.now()-lastUpdate>=500){lastUpdate=Date.now();onOutput(Buffer.concat(stdoutChunks).toString('utf8'),Buffer.concat(stderrChunks).toString('utf8'));}};
+        stream.on('data', (data: Buffer) => {appendLimited(stdoutChunks, Buffer.from(data), stdoutState);publish();});
+        stream.stderr.on('data', (data: Buffer) => {appendLimited(stderrChunks, Buffer.from(data), stderrState);publish();});
         stream.on('error', (error: Error) => {
             if (settled) return;
             settled = true;
@@ -581,7 +585,7 @@ const runTarget = async (job: JobRow, target: TargetRow, payload: JobPayload): P
         activeClients.get(job.id)?.add(client);
 
         const result = payload.kind === 'command'
-            ? await execScript(client, payload.commands, job.stop_on_error === 1, job.timeout_seconds * 1000)
+            ? await execScript(client, payload.commands, job.stop_on_error === 1, job.timeout_seconds * 1000, payload.redactOutput ? (stdout,stderr)=>{const known=jobPlaybookRedactions.get(job.id)||[];liveOutputs.set(target.id,{stdout:redactLive(stdout,known),stderr:redactLive(stderr,known)});} : undefined)
             : payload.kind === 'upload'
                 ? await uploadFiles(client, payload, job.timeout_seconds * 1000)
                 : await runPlaybook(client, job, payload);
@@ -611,6 +615,7 @@ const runTarget = async (job: JobRow, target: TargetRow, payload: JobPayload): P
             [cancelled ? 'cancelled' : 'failed', cancelled ? 'Cancelled by user.' : redact(String(error?.message || error)).slice(0, 2000), nowSeconds(), Date.now() - startedAt, target.id],
         );
     } finally {
+        liveOutputs.delete(target.id);
         if (client) {
             activeClients.get(job.id)?.delete(client);
             try { client.end(); } catch { /* already closed */ }
@@ -760,8 +765,8 @@ export const getJobDetail = async (jobId: string, userId?: number): Promise<Reco
             host: target.host,
             status: target.status,
             exitCode: target.exit_code,
-            stdout: target.encrypted_stdout ? decrypt(target.encrypted_stdout) : '',
-            stderr: target.encrypted_stderr ? decrypt(target.encrypted_stderr) : '',
+            stdout: target.encrypted_stdout ? decrypt(target.encrypted_stdout) : liveOutputs.get(target.id)?.stdout || '',
+            stderr: target.encrypted_stderr ? decrypt(target.encrypted_stderr) : liveOutputs.get(target.id)?.stderr || '',
             error: target.error,
             startedAt: target.started_at,
             finishedAt: target.finished_at,
