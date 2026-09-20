@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref, watch, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import api from '../utils/apiClient';
 import { takeAiDraft } from '../utils/aiDraft';
@@ -14,6 +14,13 @@ const selected = ref<number[]>(draft?.targets || []);
 const connections = ref<ConnectionInfo[]>([]);
 const search = ref('');
 const base = ref(''); const model = ref(''); const apiKey = ref(''); const hasKey = ref(false);
+const models = ref<string[]>([]); const modelsError = ref(''); const manualModel = ref(false);
+const scopeOpen = ref(window.innerWidth > 1000);
+const savedBase = ref(''); const savedModel = ref('');
+const configDirty = computed(() => base.value !== savedBase.value || model.value !== savedModel.value || Boolean(apiKey.value));
+const turns = ref<{ task: string; analysis: string; commands: string[]; model: string }[]>([]);
+const currentTask = ref(''); const currentModel = ref(''); const threadEnd = ref<HTMLElement | null>(null);
+const agentState = computed(() => busy.value ? t('ai.working') : activeJob.value ? t('agent.running') : answer.value?.proposalId ? t('agent.approval') : t('agent.ready'));
 const configOpen = ref(false); const busy = ref(false); const message = ref(''); const error = ref('');
 const preview = ref<{ previewId: string; content: string; base: string; model: string } | null>(null);
 const answer = ref<{ analysis: string; commands: string[]; proposalId: string | null; targetIds: number[] } | null>(null);
@@ -28,9 +35,29 @@ const visibleConnections = computed(() => connections.value.filter(c => `${c.nam
 const promptTargets = computed(() => targets.value.filter(c => c.credential_mode === 'prompt'));
 const activeJob = computed(() => ['queued', 'running'].includes(job.value?.status));
 
-function invalidate() { preview.value = null; answer.value = null; sendConsent.value = false; executeConsent.value = false; passwords.value = {}; }
+function invalidate() {
+  if (answer.value) turns.value = [...turns.value, { task: currentTask.value, analysis: answer.value.analysis, commands: answer.value.commands, model: currentModel.value }].slice(-6);
+  preview.value = null; answer.value = null; sendConsent.value = false; executeConsent.value = false; passwords.value = {};
+}
 watch([task, context, selected], invalidate, { deep: true });
 watch([base, model, apiKey], invalidate);
+watch(base, () => { models.value = []; modelsError.value = ''; });
+watch(apiKey, value => { if (value) { models.value = []; modelsError.value = ''; } });
+async function scrollThread() { await nextTick(); threadEnd.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+async function readModels() {
+  modelsError.value = '';
+  try {
+    const { data } = await api.post('/ai/models', { base: base.value, apiKey: apiKey.value }, { timeout: 70000, signal: controller.signal });
+    models.value = data.models;
+    if (!model.value || !data.models.includes(model.value)) model.value = data.suggestedModel;
+  } catch (e: any) { modelsError.value = e.response?.data?.message || t('agent.modelsFailed'); }
+}
+function refreshModels() { void run(readModels); }
+function newConversation() {
+  if (!window.confirm(t('agent.clearConfirm'))) return;
+  invalidate(); turns.value = []; task.value = ''; context.value = ''; currentTask.value = ''; job.value = null;
+  clearTimeout(poll);
+}
 async function run(action: () => Promise<void>) {
   if (busy.value) return;
   busy.value = true; error.value = ''; message.value = '';
@@ -41,10 +68,14 @@ async function run(action: () => Promise<void>) {
 async function loadConfig() {
   const { data } = await api.get('/ai/config', { signal: controller.signal });
   base.value = data.base; model.value = data.model; hasKey.value = data.hasKey;
+  savedBase.value = data.base; savedModel.value = data.model;
   configOpen.value = !data.hasKey;
 }
 async function loadEvents() { events.value = (await api.get('/ai/events', { signal: controller.signal })).data; }
 function saveConfig() { void run(async () => {
+  if ((!model.value || !models.value.length) && !manualModel.value) await readModels();
+  if (modelsError.value && !manualModel.value) { error.value = modelsError.value; return; }
+  if (!model.value) { error.value = modelsError.value || t('agent.modelsFailed'); return; }
   try { await api.put('/ai/config', { base: base.value, model: model.value, apiKey: apiKey.value }, { signal: controller.signal }); }
   finally { apiKey.value = ''; }
   invalidate(); await loadConfig(); message.value = t('ai.saved'); await loadEvents();
@@ -55,14 +86,22 @@ function deleteConfig() {
   void run(async () => { await api.delete('/ai/config'); invalidate(); await loadConfig(); await loadEvents(); });
 }
 function makePreview() { void run(async () => {
+  if (configDirty.value) { error.value = t('agent.saveFirst'); return; }
   invalidate();
-  preview.value = (await api.post('/ai/preview', { task: task.value, context: context.value, targetIds: selected.value }, { signal: controller.signal })).data;
+  const history = turns.value.flatMap(turn => [{ role: 'user', content: turn.task.slice(0, 3500) }, { role: 'assistant', content: turn.analysis.slice(0, 3500) }]);
+  preview.value = (await api.post('/ai/preview', { task: task.value, context: context.value, targetIds: selected.value, history }, { signal: controller.signal })).data;
+  currentTask.value = JSON.parse(preview.value!.content).task; currentModel.value = preview.value!.model;
+  await scrollThread();
 }); }
 function analyze() { if (!preview.value || !sendConsent.value) return; void run(async () => {
   const id = preview.value!.previewId;
-  try { answer.value = (await api.post('/ai/analyze', { previewId: id, confirm: true }, { timeout: 70000, signal: controller.signal })).data; }
+  try {
+    const result = (await api.post('/ai/analyze', { previewId: id, confirm: true }, { timeout: 70000, signal: controller.signal })).data;
+    task.value = ''; context.value = ''; await nextTick();
+    answer.value = result;
+  }
   finally { preview.value = null; sendConsent.value = false; }
-  await loadEvents();
+  await loadEvents(); await scrollThread();
 }); }
 async function refreshJob(id: string) {
   clearTimeout(poll);
@@ -89,6 +128,8 @@ function stop() { void run(async () => { await api.post('/ai/jobs/' + encodeURIC
 function follow() { context.value = JSON.stringify(job.value, null, 2).slice(0, 64000); invalidate(); }
 onMounted(() => { void run(async () => {
   await loadConfig();
+  await nextTick();
+  if (hasKey.value) await readModels();
   connections.value = (await api.get<ConnectionInfo[]>('/connections', { signal: controller.signal })).data.filter(c => c.type === 'SSH');
   selected.value = selected.value.filter(id => connections.value.some(c => c.id === id));
   await loadEvents();
@@ -107,34 +148,31 @@ onBeforeUnmount(() => { disposed = true; controller.abort(); clearTimeout(poll);
         <fieldset :disabled="busy" class="ai-config">
           <p class="ai-muted ai-wide">{{ t('ai.policy') }}</p>
           <label>{{ t('ai.base') }}<input v-model="base" type="url" required placeholder="https://api.example.com/v1" autocomplete="off" /></label>
-          <label>{{ t('ai.model') }}<input v-model="model" required placeholder="model-id" autocomplete="off" /></label>
+          <label>{{ t('agent.model') }}<select v-model="model" :aria-label="t('agent.model')"><option value="">{{ t('agent.auto') }}</option><option v-if="model && !models.includes(model)" :value="model">{{ model }}</option><option v-for="id in models" :key="id" :value="id">{{ id }}</option></select></label>
           <label class="ai-wide">{{ t('ai.key') }}<input v-model="apiKey" type="password" autocomplete="new-password" :placeholder="hasKey ? t('ai.keySaved') : 'API Key'" /></label>
+          <div class="ai-wide ai-model-tools"><button type="button" :disabled="!base || (!apiKey && !hasKey)" @click="refreshModels">{{ t('agent.readModels') }}</button><span class="ai-muted">{{ models.length }} {{ t('agent.modelLoaded') }}</span></div>
+          <p v-if="modelsError" class="ai-notice ai-wide" role="alert">{{ modelsError }}</p>
+          <p class="ai-muted ai-wide">{{ t('agent.modelHint') }}</p>
+          <details class="ai-wide" @toggle="manualModel = ($event.target as HTMLDetailsElement).open"><summary>{{ t('agent.manual') }}</summary><label>{{ t('ai.model') }}<input v-model="model" placeholder="model-id" autocomplete="off" /></label></details>
           <div class="ai-actions ai-wide"><button class="ai-primary" type="submit">{{ t('ai.save') }}</button><button type="button" :disabled="!hasKey" @click="testConfig">{{ t('ai.test') }}</button><button type="button" :disabled="!hasKey" @click="deleteConfig">{{ t('ai.remove') }}</button></div>
         </fieldset>
       </form>
     </details>
 
-    <fieldset :disabled="busy" class="ai-compose">
-      <section class="ai-card ai-inputs">
-        <label>{{ t('ai.task') }}<textarea v-model="task" rows="3" maxlength="8000" /></label>
-        <label>{{ t('ai.logs') }}<textarea v-model="context" rows="10" maxlength="64000" spellcheck="false" class="ai-code" /></label>
-        <p class="ai-muted">{{ t('ai.contextHint') }}</p>
-        <p class="ai-muted">{{ t('ai.changeHint') }}</p>
-        <button class="ai-primary" :disabled="!hasKey || !task.trim()" @click="makePreview">{{ t('ai.preview') }}</button>
+    <div class="ai-workbench">
+    <main class="ai-conversation">
+      <header class="ai-thread-header"><div><strong>{{ t('agent.conversation') }}</strong><span class="ai-presence">{{ agentState }}</span></div><button :disabled="busy || activeJob" @click="newConversation">{{ t('agent.newChat') }}</button></header>
+      <div class="ai-transcript" aria-live="polite" :aria-busy="busy">
+      <section v-if="!turns.length && !answer && !preview" class="ai-welcome">
+        <span class="ai-agent-mark" aria-hidden="true"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+        <h2>{{ t('agent.welcome') }}</h2><p>{{ t('agent.intro') }}</p>
+        <div class="ai-suggestions"><button v-for="suggestion in ['disk', 'system', 'logs']" :key="suggestion" :disabled="busy" @click="task = t('agent.' + suggestion)">{{ t('agent.' + suggestion) }} ↗</button></div>
       </section>
-      <section class="ai-card ai-targets">
-        <h2>{{ t('ai.targets') }} <span class="ai-count">{{ selected.length }}</span></h2>
-        <p class="ai-muted">{{ t('ai.targetHint') }}</p>
-        <input v-model="search" :placeholder="t('ai.search')" :aria-label="t('ai.search')" type="search" />
-        <div class="ai-server-list">
-          <label v-for="c in visibleConnections" :key="c.id" class="ai-check ai-server">
-            <input v-model="selected" type="checkbox" :value="c.id" />
-            <span><strong>{{ c.name || c.host }}</strong><small>{{ c.username }} · {{ c.host }}:{{ c.port }}</small></span>
-          </label>
-          <p v-if="!visibleConnections.length" class="ai-muted">{{ t('ai.empty') }}</p>
-        </div>
-      </section>
-    </fieldset>
+      <template v-for="(turn, index) in turns" :key="index">
+        <article class="ai-bubble ai-user-bubble"><small>{{ t('agent.you') }}</small><p>{{ turn.task }}</p></article>
+        <article class="ai-bubble ai-assistant-bubble"><small>{{ t('agent.assistant') }} · {{ turn.model }}</small><pre class="ai-archived-analysis">{{ turn.analysis }}</pre><details v-if="turn.commands.length"><summary>{{ t('agent.previous') }}</summary><pre v-for="(command, n) in turn.commands" :key="n" class="ai-code ai-output">{{ command }}</pre></details></article>
+      </template>
+      <article v-if="preview || answer" class="ai-bubble ai-user-bubble"><small>{{ t('agent.you') }}</small><p>{{ currentTask }}</p></article>
 
     <section v-if="preview" class="ai-card ai-stage">
       <h2>{{ t('ai.previewTitle') }}</h2>
@@ -145,7 +183,8 @@ onBeforeUnmount(() => { disposed = true; controller.abort(); clearTimeout(poll);
       <button class="ai-primary" :disabled="busy || !sendConsent" @click="analyze">{{ t('ai.send') }}</button>
     </section>
 
-    <section v-if="answer" class="ai-card ai-stage">
+    <section v-if="answer" class="ai-card ai-stage ai-assistant-bubble">
+      <small>{{ t('agent.assistant') }} · {{ currentModel }}</small>
       <h2>{{ t('ai.result') }}</h2>
       <pre class="ai-analysis">{{ answer.analysis }}</pre>
       <p v-if="!answer.commands.length" class="ai-muted">{{ t('ai.noCommands') }}</p>
@@ -168,20 +207,48 @@ onBeforeUnmount(() => { disposed = true; controller.abort(); clearTimeout(poll);
         <pre class="ai-code ai-output">{{ target.stdout }}{{ target.stderr }}{{ target.error }}</pre>
       </details>
     </section>
+      <div ref="threadEnd"></div>
+      </div>
+      <form class="ai-composer-shell" @submit.prevent="makePreview">
+        <fieldset :disabled="busy" class="ai-inputs">
+          <label>{{ t('ai.task') }}<textarea v-model="task" :placeholder="t('agent.composer')" rows="3" maxlength="8000" @keydown.ctrl.enter.prevent="hasKey && task.trim() && makePreview()" @keydown.meta.enter.prevent="hasKey && task.trim() && makePreview()" /></label>
+          <details :open="Boolean(context)"><summary>{{ t('agent.attach') }} <span v-if="context" class="ai-count">{{ context.length }}</span></summary>
+            <label>{{ t('ai.logs') }}<textarea v-model="context" rows="5" maxlength="64000" spellcheck="false" class="ai-code" /></label>
+            <p class="ai-muted">{{ t('ai.contextHint') }}</p>
+          </details>
+          <p v-if="configDirty" class="ai-muted">{{ t('agent.saveFirst') }}</p>
+          <div class="ai-composer-footer"><span class="ai-muted">{{ savedModel || t('agent.auto') }} · {{ selected.length ? selected.length + ' SSH' : t('agent.noScope') }}</span><button type="submit" class="ai-primary" :disabled="!hasKey || !task.trim() || configDirty">{{ t('ai.preview') }}</button></div>
+          <p class="ai-muted">{{ t('agent.history') }}</p>
+        </fieldset>
+      </form>
+    </main>
+    <aside class="ai-context-panel">
+      <details class="ai-card ai-scope" :open="scopeOpen" @toggle="scopeOpen = ($event.target as HTMLDetailsElement).open">
+      <summary>{{ t('agent.scope') }} <span class="ai-count">{{ selected.length }}</span></summary>
+      <fieldset :disabled="busy" class="ai-targets">
+        <p class="ai-muted">{{ t('ai.targetHint') }}</p>
+        <input v-model="search" :placeholder="t('ai.search')" :aria-label="t('ai.search')" type="search" />
+        <div class="ai-server-list"><label v-for="c in visibleConnections" :key="c.id" class="ai-check ai-server"><input v-model="selected" type="checkbox" :value="c.id" /><span><strong>{{ c.name || c.host }}</strong><small>{{ c.username }} · {{ c.host }}:{{ c.port }}</small></span></label><p v-if="!visibleConnections.length" class="ai-muted">{{ t('ai.empty') }}</p></div>
+        <span class="ai-guard"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> {{ t('agent.approved') }}</span>
+      </fieldset>
+      </details>
     <details class="ai-card"><summary>{{ t('ai.audit') }}</summary>
       <div v-for="(item, i) in events" :key="i" class="ai-event"><span>{{ new Date(item.created_at).toLocaleString() }} · {{ item.action }}</span><button v-if="item.job_id" :disabled="busy" @click="run(() => refreshJob(item.job_id!))">{{ t('ai.restoreJob') }}</button></div>
     </details>
+    </aside>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .ai-page{display:grid;gap:20px;max-width:1320px;margin:0 auto;color:var(--text-color)}
+.ai-scope[open] .ai-targets{margin-top:14px}
 .ai-card{min-width:0;padding:22px;background:var(--fd-surface);border:1px solid var(--fd-line);border-radius:var(--fd-radius);box-shadow:var(--fd-shadow)}
 .ai-compose{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);gap:20px;min-width:0}
 fieldset{border:0;padding:0;margin:0} fieldset:disabled{opacity:.7}
 .ai-inputs,.ai-stage{display:grid;gap:14px}.ai-config{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding-top:18px}.ai-wide{grid-column:1/-1}
 label{display:grid;gap:7px;font-size:13px;font-weight:600}h2,summary{font-size:15px;font-weight:650}summary{cursor:pointer}h2{margin:0}
-input:not([type=checkbox]),textarea{width:100%;min-width:0;box-sizing:border-box;border:1px solid var(--fd-line);border-radius:8px;background:var(--fd-surface);color:var(--text-color);padding:10px 12px;font-weight:400}
+input:not([type=checkbox]),textarea,select{width:100%;min-width:0;box-sizing:border-box;border:1px solid var(--fd-line);border-radius:8px;background:var(--fd-surface);color:var(--text-color);padding:10px 12px;font-weight:400}
 textarea{resize:vertical}input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--link-active-color);outline-offset:2px}
 .ai-muted{color:var(--text-color-secondary);font-size:12px;line-height:1.7;margin:0}.ai-notice{padding:13px;border:1px solid var(--fd-line);background:var(--fd-accent-soft);border-radius:8px;font-size:13px;line-height:1.7;margin:0}.ai-error{color:var(--error-color,#c2413a)}
 .ai-actions{display:flex;gap:8px;flex-wrap:wrap}button{width:fit-content;border:1px solid var(--fd-line);border-radius:8px;padding:9px 14px;background:var(--fd-surface);color:var(--text-color);font-size:13px;cursor:pointer}button:hover{background:var(--fd-subtle)}button.ai-primary{background:var(--link-active-color);color:var(--button-text-color,#fff);border-color:transparent}button:disabled{opacity:.45;cursor:not-allowed}
@@ -189,5 +256,6 @@ textarea{resize:vertical}input:focus-visible,textarea:focus-visible,button:focus
 .ai-targets{display:flex;flex-direction:column;gap:14px}.ai-count{display:inline-block;padding:1px 7px;border-radius:5px;font-size:12px;background:var(--fd-accent-soft);color:var(--link-active-color)}
 .ai-server-list{max-height:330px;overflow:auto}.ai-server{padding:10px 0;border-bottom:1px solid var(--fd-line)}.ai-server span{min-width:0;overflow-wrap:anywhere}.ai-server strong{display:block;font-size:13px}.ai-server small{color:var(--text-color-secondary);font-size:11px}
 .ai-code{font:12px/1.75 Consolas,monospace}.ai-output{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:420px;padding:14px;background:var(--fd-subtle);border:1px solid var(--fd-line);border-radius:8px;margin:0}.ai-analysis{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.8 inherit;margin:0}.ai-destination{overflow-wrap:anywhere;font-size:13px;margin:0}.ai-approved-targets{list-style:disc;padding-left:20px;font-size:13px;overflow-wrap:anywhere}.ai-event{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-top:12px;font-size:12px;flex-wrap:wrap}
-@media(max-width:800px){.ai-compose,.ai-config{grid-template-columns:1fr}.ai-card{padding:16px}.ai-page{gap:14px}}
+.ai-workbench{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:20px;align-items:start}.ai-conversation{min-width:0;border:1px solid var(--fd-line);border-radius:16px;background:var(--fd-surface);overflow:hidden}.ai-thread-header{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid var(--fd-line);gap:12px}.ai-thread-header strong{font-size:14px}.ai-presence{display:block;font-size:11px;color:var(--text-color-secondary);margin-top:5px}.ai-presence:before{content:'';display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;background:var(--link-active-color)}.ai-transcript{padding:24px;display:flex;flex-direction:column;gap:20px;min-height:350px;max-height:65vh;overflow:auto;overscroll-behavior:contain}.ai-transcript>.ai-card{box-shadow:none;border-radius:12px;padding:18px}.ai-welcome{margin:auto;text-align:center;max-width:570px;padding:24px 12px}.ai-welcome h2{font-size:23px;letter-spacing:-.5px;margin:18px 0 10px}.ai-welcome p{font-size:13px;line-height:1.8;color:var(--text-color-secondary)}.ai-agent-mark{display:inline-grid;place-items:center;width:48px;height:48px;border-radius:14px;background:var(--fd-accent-soft);color:var(--link-active-color);font-size:22px}.ai-suggestions{display:flex;justify-content:center;flex-wrap:wrap;gap:8px;margin-top:22px}.ai-suggestions button{font-size:12px;text-align:left}.ai-context-panel{display:grid;gap:16px;min-width:0}.ai-context-panel .ai-card{padding:18px}.ai-bubble{max-width:100%;min-width:0;overflow-wrap:anywhere}.ai-bubble small,.ai-stage>small{font-size:11px;font-weight:600;color:var(--text-color-secondary)}.ai-bubble p{margin:6px 0 0;white-space:pre-wrap;line-height:1.7;font-size:13px}.ai-user-bubble{align-self:flex-end;max-width:90%;padding:13px 17px;background:var(--fd-accent-soft);border-radius:14px 14px 3px 14px}.ai-assistant-bubble{padding:12px 0;line-height:1.8}.ai-archived-analysis{font-family:inherit;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}.ai-composer-shell{padding:18px 22px;border-top:1px solid var(--fd-line);background:var(--fd-subtle)}.ai-composer-shell textarea{background:var(--fd-surface)}.ai-composer-shell summary{font-size:12px;font-weight:500}.ai-composer-shell details label{margin-top:12px}.ai-composer-footer,.ai-model-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.ai-composer-footer>span{overflow-wrap:anywhere;max-width:100%}.ai-guard{padding:10px;border-radius:8px;background:var(--fd-accent-soft);font-size:11px;color:var(--link-active-color)}
+@media(max-width:1000px){.ai-workbench{grid-template-columns:1fr}.ai-context-panel{grid-row:1}.ai-server-list{max-height:130px}.ai-transcript{max-height:65vh}}@media(max-width:800px){.ai-compose,.ai-config{grid-template-columns:1fr}.ai-card{padding:16px}.ai-page{gap:14px}.ai-transcript{padding:14px}.ai-thread-header,.ai-composer-shell{padding:14px}.ai-welcome{padding:14px 0}.ai-thread-header button{padding:7px;font-size:11px}}
 </style>

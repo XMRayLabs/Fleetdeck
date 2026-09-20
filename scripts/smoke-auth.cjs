@@ -143,13 +143,27 @@ const proxy = (req, res, port, headers) => {
   assert.ok((await context.request.delete(origin + '/api/v1/connections/' + ipv6.id)).ok());
   console.log('PASS IPv6 create/update persisted canonically; username and port preserved');
   // Real AI config/preview APIs; the model and execution boundaries are mocked for UI only.
+  let modelReads = 0;
+  await page.route('**/api/v1/ai/models', route => {
+    modelReads++;
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ models: ['fixture-model', 'fixture-instruct'], suggestedModel: 'fixture-model' }) });
+  });
   await page.goto(origin + '/ai', { waitUntil: 'networkidle' });
   await page.getByLabel('API base URL (include /v1 if required)', { exact: true }).fill('https://example.com/v1');
-  await page.getByLabel('Model ID', { exact: true }).fill('fixture-model');
   await page.getByLabel('API Key', { exact: true }).fill('fixture-ui-key-not-real');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByRole('status').filter({ hasText: 'Saved' }).waitFor();
+  assert.ok(modelReads > 0, 'Saving must automatically discover a model without typing an ID');
+  assert.equal((await (await context.request.get(origin + '/api/v1/ai/config')).json()).model, 'fixture-model');
+  await page.locator('summary').filter({ hasText: /^AI API settings$/ }).click();
+  await page.getByLabel('Model', { exact: true }).selectOption('fixture-instruct');
+  const modelSaved = page.waitForResponse(r => r.url().endsWith('/ai/config') && r.request().method() === 'PUT');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  assert.equal((await modelSaved).status(), 200);
+  await page.getByRole('status').filter({ hasText: 'Saved' }).waitFor();
+  assert.equal((await (await context.request.get(origin + '/api/v1/ai/config')).json()).model, 'fixture-instruct');
   await page.getByLabel('What should AI help with?', { exact: true }).fill('Analyze disk usage');
+  await page.locator('.ai-composer-shell summary').click();
   await page.getByLabel('Selected terminal text / logs', { exact: true }).fill('password=browser-test-secret\nTOKEN=browser-test-token\nFilesystem full');
   await page.getByRole('button', { name: 'Preview redacted content', exact: true }).click();
   const redactedPreview = page.getByTestId('ai-preview');
@@ -166,6 +180,12 @@ const proxy = (req, res, port, headers) => {
   assert.equal(await page.getByRole('button', { name: 'Execute approved commands', exact: true }).count(), 0, 'Analysis-only must not allow execution');
   await page.getByLabel('What should AI help with?', { exact: true }).fill('Updated task');
   assert.equal(await page.locator('.ai-analysis').count(), 0, 'Editing inputs must invalidate proposals');
+  assert.equal(await page.locator('.ai-archived-analysis').count(), 1, 'Previous answer remains visible in the conversation');
+  await page.getByRole('button', { name: 'Preview redacted content', exact: true }).click();
+  await page.getByTestId('ai-preview').waitFor();
+  const conversationPreview = JSON.parse(await page.getByTestId('ai-preview').innerText());
+  assert.equal(conversationPreview.history.length, 2);
+  assert.ok(conversationPreview.history[1].content.includes('Diagnose disk usage.'));
   assert.ok(!(await page.evaluate(() => JSON.stringify(localStorage))).includes('browser-test-secret'));
   await page.unroute('**/api/v1/ai/analyze');
   const aiFixtureResponse = await context.request.post(origin + '/api/v1/connections', { data: {

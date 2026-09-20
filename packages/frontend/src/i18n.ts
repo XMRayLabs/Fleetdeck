@@ -1,5 +1,5 @@
 import { createI18n, Composer } from 'vue-i18n';
-import { aiMessages } from './locales/ai';
+import { aiMessages, agentMessages } from './locales/ai';
 
 // 动态导入 locales 目录下的所有 .json 文件
 // 使用 { eager: true } 确保同步加载，因为 i18n 实例需要在应用初始化时就绪
@@ -18,6 +18,8 @@ for (const path in localeModules) {
     const ai = aiMessages[locale as keyof typeof aiMessages];
     if (ai) {
       messages[locale].ai = ai;
+      messages[locale].agent = agentMessages[locale as keyof typeof agentMessages];
+      messages[locale].agent.saveFirst = locale === 'zh-CN' ? '请先保存新的 API / 模型设置。' : locale === 'ja-JP' ? '変更した API / モデル設定を先に保存してください。' : 'Save the changed API / model settings first.';
       messages[locale].ui.pages.AiAssistant = ai.description;
     }
     availableLocales.push(locale);

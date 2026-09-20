@@ -6,7 +6,7 @@ import { getDbInstance, runDb, getDb, allDb } from '../database/connection';
 import { encrypt, decrypt } from '../utils/crypto';
 import { createCommandJob, getJobDetail, cancelJob } from '../orchestration/orchestration.service';
 import { redact, redactValue } from './redact';
-import { endpoint, askProvider } from './provider';
+import { endpoint, askProvider, discoverModels } from './provider';
 
 const router = Router();
 type Config = { base: string; model: string; key: string };
@@ -72,14 +72,35 @@ router.use(isAuthenticated);
 router.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 router.use(rateLimit({ windowMs: 60000, limit: 30, keyGenerator: req => String(req.session.userId), standardHeaders: true, legacyHeaders: false }));
 router.get('/config', handle(async (_req, res, user) => { const c = await config(user); res.json({ base: c.base, model: c.model, hasKey: Boolean(c.key) }); }));
+router.post('/models', handle(async (req, res, user) => {
+    const previous = await config(user);
+    const base = req.body.base ?? previous.base;
+    if (typeof base !== 'string' || base.length > 2048) throw new Error('API 地址无效。');
+    endpoint(base);
+    const key = req.body.apiKey || (base === previous.base ? previous.key : '');
+    if (typeof key !== 'string' || !key || key.length > 4096 || /[\r\n]/.test(key)) throw new Error('请填写此 API 地址的密钥。');
+    if (busy.has(user)) throw new Error('已有 AI 请求进行中。');
+    busy.add(user);
+    try {
+        const result = await discoverModels(base, key);
+        res.json({ ...result, suggestedModel: base === previous.base && result.models.includes(previous.model) ? previous.model : result.suggestedModel });
+    } finally { busy.delete(user); }
+}));
 router.put('/config', handle(async (req, res, user) => {
     const { base, model, apiKey } = req.body;
-    if (typeof base !== 'string' || base.length > 2048 || typeof model !== 'string' || !model.trim() || model.length > 150 || /[\r\n]/.test(model)) throw new Error('API 地址或模型名称无效。');
+    if (typeof base !== 'string' || base.length > 2048 || (model !== undefined && (typeof model !== 'string' || model.length > 150 || /[\r\n]/.test(model)))) throw new Error('API 地址或模型名称无效。');
     endpoint(base);
     const previous = await config(user);
     const key = typeof apiKey === 'string' && apiKey ? apiKey : previous.base === base ? previous.key : '';
     if (!key || key.length > 4096 || /[\r\n]/.test(key)) throw new Error('请填写 API Key；更换 API 地址必须重新填写密钥。');
-    await runDb(await db(), 'INSERT INTO ai_user_config VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET encrypted_config=excluded.encrypted_config', [user, encrypt(JSON.stringify({ base, model: model.trim(), key }))]);
+    let selectedModel = model?.trim();
+    if (!selectedModel) {
+        if (busy.has(user)) throw new Error('已有 AI 请求进行中。');
+        busy.add(user);
+        try { selectedModel = (await discoverModels(base, key)).suggestedModel; } finally { busy.delete(user); }
+    }
+    if (!selectedModel) throw new Error('没有识别到对话模型，请从列表选择或手动填写。');
+    await runDb(await db(), 'INSERT INTO ai_user_config VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET encrypted_config=excluded.encrypted_config', [user, encrypt(JSON.stringify({ base, model: selectedModel, key }))]);
     for (const [id, entry] of pending) if (entry.user === user) pending.delete(id);
     await event(user, 'config_saved'); res.json({ ok: true });
 }));
@@ -97,12 +118,14 @@ router.post('/test', handle(async (_req, res, user) => {
 }));
 router.post('/preview', handle(async (req, res, user) => {
     const { task, context, targetIds } = req.body;
+    const history = req.body.history ?? [];
+    if (!Array.isArray(history) || history.length > 12 || history.some(item => !item || !['user', 'assistant'].includes(item.role) || typeof item.content !== 'string' || item.content.length > 8000) || JSON.stringify(history).length > 50000) throw new Error('对话历史过长或格式无效。');
     if (typeof task !== 'string' || !task.trim() || task.length > 8000 || typeof context !== 'string' || context.length > 64000 || !Array.isArray(targetIds) || targetIds.length > 50 || targetIds.some(id => !Number.isInteger(id) || id < 1)) throw new Error('任务、日志或服务器选择无效（任务 8,000 字，日志 64,000 字，最多 50 台）。');
     const targets = [...new Set<number>(targetIds)];
     for (const id of targets) { const row = await getDb(await db(), 'SELECT type FROM connections WHERE id=?', [id]); if (row?.type !== 'SSH') throw new Error('仅支持已存在的 SSH 服务器。'); }
     const c = await config(user); if (!c.key) throw new Error('请先保存 AI 配置。');
     const known = await secrets(user);
-    const content = JSON.stringify({ task: redact(task, known), logs: redact(context, known), targetCount: targets.length }, null, 2);
+    const content = JSON.stringify({ task: redact(task, known), logs: redact(context, known), targetCount: targets.length, history: history.map(item => ({ role: item.role, content: redact(item.content, known) })) }, null, 2);
     const previewId = savePending({ user, content, targets, fingerprint: await fingerprint(targets), base: c.base, model: c.model });
     res.json({ previewId, content, base: c.base, model: c.model });
 }));
