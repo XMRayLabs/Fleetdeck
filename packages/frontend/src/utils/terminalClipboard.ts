@@ -9,9 +9,6 @@ export async function copyTerminalText(text: string): Promise<boolean> {
   try { return document.execCommand('copy'); } catch { return false; }
   finally { field.remove(); previous?.focus({ preventScroll: true }); }
 }
-export function needsPasteReview(text: string): boolean {
-  return text.length > 2000 || /[\r\n\x00-\x08\x0b-\x1f\x7f]/.test(text);
-}
 export function terminalClipboardKey(event: KeyboardEvent): 'copy' | 'paste' | null {
   if (event.altKey) return null;
   if (event.ctrlKey && event.shiftKey && event.code === 'KeyC' || event.metaKey && !event.ctrlKey && event.code === 'KeyC' || event.ctrlKey && event.code === 'Insert') return 'copy';

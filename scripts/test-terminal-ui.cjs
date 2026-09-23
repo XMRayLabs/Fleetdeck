@@ -14,7 +14,7 @@ module.exports=async function testTerminalClipboard(page,context,origin){
  await page.getByRole('button',{name:'Restore panels',exact:true}).click();
  const restored=await page.locator('.terminal-inner-container').boundingBox();assert.ok(restored.height<focused.height*.85);
  await page.getByRole('button',{name:'Focus terminal',exact:true}).click();
- assert.ok(await page.locator('.xterm-rows').textContent().then(s=>s.includes('clipboard fixture ready')),'Changing view must retain terminal output');
+ await page.waitForFunction(()=>document.querySelector('.xterm-rows')?.textContent.includes('clipboard fixture ready'),{},{timeout:10000});
  await tools.getByLabel('Terminal actions',{exact:true}).click();
  await page.evaluate(()=>{window.testClipboard='';Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.testClipboard=text;},readText:async()=>window.testClipboard}});});
  await tools.getByRole('button',{name:'Select all',exact:true}).click();
@@ -25,10 +25,8 @@ module.exports=async function testTerminalClipboard(page,context,origin){
  await page.evaluate(()=>{window.testClipboard='printf safe';});await tools.getByRole('button',{name:/^Paste/}).click();
  await page.waitForTimeout(100);assert.deepEqual(inputs,['\x1b[200~printf safe\x1b[201~'],'must use bracketed paste exactly once');
  await keyboard.evaluate(el=>{const data=new DataTransfer();data.setData('text/plain','echo first\necho second');el.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}));});
- const dialog=page.getByRole('dialog',{name:'Review paste',exact:true});await dialog.waitFor();assert.equal(inputs.length,1);
- await dialog.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(inputs.length,1);
- await page.evaluate(()=>{window.testClipboard='echo first\necho second';});await keyboard.focus();await page.keyboard.press('Control+Shift+V');await dialog.waitFor();assert.equal(inputs.length,1);
- await dialog.getByRole('button',{name:'Paste into terminal',exact:true}).click();await page.waitForTimeout(100);assert.equal(inputs.length,2);assert.ok(inputs[1].startsWith('\x1b[200~'));
+ await page.waitForTimeout(100);assert.equal(inputs.length,2);assert.equal(await page.getByRole('dialog').count(),0,'Multiline native paste must not ask for confirmation');assert.ok(inputs[1].startsWith('\x1b[200~'));
+ await page.evaluate(()=>{window.testClipboard='echo first\necho second';});await keyboard.focus();await page.keyboard.press('Control+Shift+V');await page.waitForTimeout(100);assert.equal(inputs.length,3);assert.equal(await page.getByRole('dialog').count(),0,'Shortcut paste must not ask for confirmation');
  await keyboard.focus();await page.keyboard.press('Control+c');await page.waitForTimeout(100);assert.equal(inputs.at(-1),'\x03','Ctrl+C remains interrupt');
  await tools.getByRole('button',{name:'Select all',exact:true}).click();await terminal.dispatchEvent('contextmenu',{button:2});assert.ok((await page.evaluate(()=>window.testClipboard)).includes('clipboard fixture ready'));
  await page.evaluate(()=>{navigator.clipboard.readText=async()=>{throw new Error('denied');};});await tools.getByRole('button',{name:/^Paste/}).click();
@@ -36,5 +34,5 @@ module.exports=async function testTerminalClipboard(page,context,origin){
  await tools.getByLabel('Terminal actions',{exact:true}).click();
  if(process.env.UI_SCREENSHOT_DIR)await page.screenshot({path:require('node:path').join(process.env.UI_SCREENSHOT_DIR,'terminal-clipboard.png'),fullPage:true});
  await page.goto(origin+'/',{waitUntil:'networkidle'});await context.request.delete(origin+'/api/v1/connections/'+connection.id);
- console.log('PASS terminal clipboard: toolbar, copy shortcut, SIGINT, native/shortcut paste, bracketed paste, multiline confirmation, cancel, right-click copy and permission fallback (mock SSH)');
+ console.log('PASS terminal clipboard: toolbar, copy shortcut, SIGINT, direct multiline native/shortcut paste without prompts, bracketed paste, right-click copy and permission fallback (mock SSH)');
 };

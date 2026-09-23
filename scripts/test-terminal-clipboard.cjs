@@ -4,9 +4,7 @@ const source=fs.readFileSync(path.join(__dirname,'../packages/frontend/src/utils
 let copied='';let removed=false;let restored=false;let legacy=false;
 const sandbox={exports:{},navigator:{clipboard:{writeText:async text=>{copied=text;}}},document:{activeElement:{focus:()=>{restored=true;}},body:{append:()=>{}},createElement:()=>({style:{},setAttribute:()=>{},select:()=>{},remove:()=>{removed=true;}}),execCommand:()=>{legacy=true;return true;}}};
 vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,sandbox);
-const {copyTerminalText,needsPasteReview,terminalClipboardKey}=sandbox.exports;
-for(const input of ['echo hello','你好','printf safe'])assert.equal(needsPasteReview(input),false);
-for(const input of ['echo one\necho two','echo test\r','\x1b[A','\x00','x'.repeat(2001)])assert.equal(needsPasteReview(input),true);
+const {copyTerminalText,terminalClipboardKey}=sandbox.exports;
 assert.equal(terminalClipboardKey({ctrlKey:true,code:'KeyC'}),null);
 assert.equal(terminalClipboardKey({ctrlKey:true,code:'KeyV'}),null);
 assert.equal(terminalClipboardKey({ctrlKey:true,shiftKey:true,code:'KeyC'}),'copy');
@@ -15,4 +13,4 @@ assert.equal(terminalClipboardKey({ctrlKey:true,code:'Insert'}),'copy');
 assert.equal(terminalClipboardKey({shiftKey:true,code:'Insert'}),'paste');
 assert.equal(terminalClipboardKey({metaKey:true,code:'KeyC'}),'copy');
 assert.equal(terminalClipboardKey({metaKey:true,code:'KeyV'}),null);
-(async()=>{assert.equal(await copyTerminalText('你好'),true);assert.equal(copied,'你好');assert.equal(await copyTerminalText(''),false);sandbox.navigator.clipboard.writeText=async()=>{throw Error('denied');};assert.equal(await copyTerminalText('fallback'),true);assert.ok(legacy&&removed&&restored);sandbox.document.execCommand=()=>false;assert.equal(await copyTerminalText('denied'),false);console.log('PASS clipboard shortcuts, Ctrl+C preservation, paste guards, async copy, legacy fallback and denial');})().catch(e=>{console.error(e);process.exitCode=1;});
+(async()=>{assert.equal(await copyTerminalText('你好'),true);assert.equal(copied,'你好');assert.equal(await copyTerminalText(''),false);sandbox.navigator.clipboard.writeText=async()=>{throw Error('denied');};assert.equal(await copyTerminalText('fallback'),true);assert.ok(legacy&&removed&&restored);sandbox.document.execCommand=()=>false;assert.equal(await copyTerminalText('denied'),false);console.log('PASS clipboard shortcuts, Ctrl+C preservation, async copy, legacy fallback and denial');})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue';
 import { registerAgentTerminal, useAgentStore } from '../stores/agent.store';
-import { copyTerminalText, needsPasteReview, terminalClipboardKey } from '../utils/terminalClipboard';
+import { copyTerminalText, terminalClipboardKey } from '../utils/terminalClipboard';
 import { useI18n } from 'vue-i18n';
 import { Terminal, ITerminalAddon, IDisposable } from 'xterm';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
@@ -35,9 +35,7 @@ const terminalOuterWrapperRef = ref<HTMLElement | null>(null); // 最外层容�
 let terminal: Terminal | null = null;
 const aiPanel = useAgentStore();
 const { t: aiT } = useI18n();
-const clipboardStatus = ref('');
 const pasteDraft = ref<string | null>(null);
-const manualPaste = ref(false);
 const hasSelection = ref(false);
 const pasteField = ref<HTMLTextAreaElement | null>(null);
 watch(pasteDraft,(value,old)=>{if(value!==null && old===null)void nextTick(()=>pasteField.value?.focus());});
@@ -47,23 +45,20 @@ async function copySelection(clear = false) {
   if (!text) return;
   const copied = await copyTerminalText(text);
   if(clipboardDisposed)return;
-  clipboardStatus.value=copied ? '' : aiT('terminalClipboard.failed');
   if(copied && clear)terminal?.clearSelection();
 }
 function queuePaste(text:string) {
   if(clipboardDisposed || !text)return;
-  if(new Blob([text]).size>1048576){clipboardStatus.value=aiT('terminalClipboard.large');return;}
-  if(needsPasteReview(text)){manualPaste.value=false;pasteDraft.value=text;return;}
+  if(new Blob([text]).size>1048576)return;
   terminal?.paste(text);terminal?.focus();
 }
 async function pasteClipboard() {
   try {const text=await navigator.clipboard.readText();queuePaste(text);}
-  catch {if(!clipboardDisposed){manualPaste.value=true;pasteDraft.value='';}}
+  catch {if(!clipboardDisposed)pasteDraft.value='';}
 }
 function confirmPaste() {
   const text=pasteDraft.value || '';
-  if(new Blob([text]).size>1048576){clipboardStatus.value=aiT('terminalClipboard.large');return;}
-  pasteDraft.value=null;terminal?.paste(text);terminal?.focus();
+  pasteDraft.value=null;queuePaste(text);
 }
 function cancelPaste(){pasteDraft.value=null;terminal?.focus();}
 function selectAllText(){terminal?.selectAll();}
@@ -465,7 +460,6 @@ onMounted(() => {
     // --- 监听并处理选中即复制 ---
     const handleSelectionChange = () => {
         hasSelection.value=Boolean(terminal?.hasSelection());
-        clipboardStatus.value='';
     };
 
     // 添加防抖以避免过于频繁地触发 handleSelectionChange
@@ -741,15 +735,12 @@ watchEffect(() => {
       <span :title="aiT('terminalClipboard.help')" tabindex="0" class="terminal-help">?</span>
       </div>
     </details>
-    <div v-if="clipboardStatus && isActive" class="terminal-clipboard-status" role="status">{{ clipboardStatus }}<button type="button" @click="clipboardStatus=''">×</button></div>
     <!-- xterm 实际挂载点 -->
     <div ref="terminalRef" class="terminal-inner-container"></div>
     <Teleport to="body"><div v-if="pasteDraft!==null && isActive" class="terminal-paste-backdrop" @keydown.esc.stop.prevent="cancelPaste">
-      <section class="terminal-paste-dialog" role="dialog" aria-modal="true" :aria-label="aiT(manualPaste ? 'terminalClipboard.manual' : 'terminalClipboard.review')" @keydown="trapPasteFocus">
-        <h2>{{ aiT(manualPaste ? 'terminalClipboard.manual' : 'terminalClipboard.review') }}</h2>
-        <p>{{ aiT(manualPaste ? 'terminalClipboard.hint' : 'terminalClipboard.warning') }}</p>
-        <textarea ref="pasteField" v-model="pasteDraft" :aria-label="aiT('terminalClipboard.review')" rows="9" maxlength="1048576" spellcheck="false" />
-        <pre v-if="/[\x00-\x08\x0b-\x1f\x7f]/.test(pasteDraft)">{{ pasteDraft.replace(/[\x00-\x08\x0b-\x1f\x7f]/g,c=>'⟨0x'+c.charCodeAt(0).toString(16).padStart(2,'0')+'⟩') }}</pre>
+      <section class="terminal-paste-dialog" role="dialog" aria-modal="true" :aria-label="aiT('terminalClipboard.manual')" @keydown="trapPasteFocus">
+        <h2>{{ aiT('terminalClipboard.manual') }}</h2>
+        <textarea ref="pasteField" v-model="pasteDraft" :aria-label="aiT('terminalClipboard.manual')" rows="9" maxlength="1048576" spellcheck="false" />
         <div><button type="button" @click="cancelPaste">{{ aiT('terminalClipboard.cancel') }}</button><button type="button" :disabled="!pasteDraft" @click="confirmPaste">{{ aiT('terminalClipboard.send') }}</button></div>
       </section>
     </div></Teleport>
@@ -759,7 +750,6 @@ watchEffect(() => {
 <style scoped>
 .terminal-tools{position:absolute;right:12px;top:6px;z-index:5;color:var(--text-color)}.terminal-tools>summary{list-style:none;cursor:pointer;background:var(--fd-surface);border:1px solid var(--fd-line);border-radius:6px;width:28px;height:24px;text-align:center;line-height:18px;font-size:22px;opacity:.6}.terminal-tools>summary:hover,.terminal-tools[open]>summary{opacity:1}.terminal-tools>div{position:absolute;right:0;top:29px;display:flex;flex-direction:column;align-items:stretch;gap:5px;padding:8px;background:var(--fd-surface);border:1px solid var(--fd-line);border-radius:8px;box-shadow:var(--fd-shadow);width:210px;max-width:80vw}.terminal-tools>div button{text-align:left}
 .terminal-tools button,.terminal-paste-dialog button{padding:5px 9px;border:1px solid var(--fd-line);border-radius:6px;background:var(--fd-subtle);color:var(--text-color);font-size:12px;cursor:pointer}.terminal-tools button:disabled{opacity:.4;cursor:default}.terminal-tools kbd{font-size:10px;color:var(--text-color-secondary);margin-left:5px}.terminal-help{cursor:help;color:var(--text-color-secondary);padding:4px}
-.terminal-clipboard-status{display:flex;justify-content:space-between;gap:10px;padding:6px 12px;font-size:12px;background:var(--fd-accent-soft);color:var(--text-color);flex-shrink:0}
 .terminal-paste-backdrop{position:fixed;inset:0;z-index:10000;background:#0008;display:grid;place-items:center;padding:16px}.terminal-paste-dialog{width:min(680px,100%);max-height:90vh;overflow:auto;padding:22px;border:1px solid var(--fd-line);border-radius:12px;background:var(--fd-surface);color:var(--text-color);box-shadow:0 20px 70px #0005}.terminal-paste-dialog h2{font-size:18px;margin:0 0 12px}.terminal-paste-dialog p{font-size:13px;line-height:1.6;margin:0 0 14px}.terminal-paste-dialog textarea{width:100%;padding:12px;border:1px solid var(--fd-line);border-radius:8px;background:var(--fd-subtle);color:var(--text-color);font:13px/1.6 Consolas,monospace;resize:vertical}.terminal-paste-dialog>div{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}.terminal-paste-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
 .terminal-outer-wrapper {
   display:flex;
