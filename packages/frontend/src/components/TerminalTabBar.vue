@@ -465,6 +465,7 @@ onBeforeUnmount(() => {
     </div>
     <!-- Action Buttons -->
     <div class="flex items-center ml-auto h-full flex-shrink-0">
+        <slot name="workspace-tools" />
         <button
           v-if="isWorkspaceRoute"
           class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"

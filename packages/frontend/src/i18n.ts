@@ -23,6 +23,7 @@ for (const path in localeModules) {
       messages[locale].ai.contextHint = locale === 'zh-CN' ? '手动附加日志，最多 64,000 字；会与对话摘要、所选设备及勾选的上下文一起进入脱敏预览。' : locale === 'ja-JP' ? '手動添付ログは最大 64,000 文字。会話要約、対象デバイス、選択した情報源と共に確認できます。' : 'Manually attached logs, up to 64,000 characters, join conversation summaries, selected devices and opted-in sources in the redacted preview.';
       messages[locale].ops = opsMessages[locale as keyof typeof opsMessages];
       messages[locale].terminalClipboard = terminalClipboardMessages[locale as keyof typeof terminalClipboardMessages];
+      Object.assign(messages[locale].terminalClipboard, locale === 'zh-CN' ? {actions:'终端操作',focus:'专注终端',restoreLayout:'恢复面板'} : locale === 'ja-JP' ? {actions:'端末操作',focus:'端末に集中',restoreLayout:'パネルを復元'} : {actions:'Terminal actions',focus:'Focus terminal',restoreLayout:'Restore panels'});
       messages[locale].ops.autoReview = locale === 'zh-CN' ? '执行完成后自动准备复查（仍需确认发送）' : locale === 'ja-JP' ? '完了後に再分析を準備（送信は要承認）' : 'Prepare review after execution (sending still requires approval)';
       messages[locale].ops.limits = locale === 'zh-CN' ? '每个计划最多 5 轮 / 15 分钟；每轮都需人工确认' : locale === 'ja-JP' ? '計画ごとに最大 5 回 / 15 分。毎回承認が必要' : 'Up to 5 rounds / 15 minutes per plan; approval required every round';
       messages[locale].ui.pages.Monitoring = messages[locale].ops.description;

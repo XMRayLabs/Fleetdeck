@@ -156,13 +156,18 @@
 @media(prefers-reduced-motion:reduce) { #app-container *,#app-container *::before,#app-container *::after { scroll-behavior:auto !important; transition:none !important; animation:none !important; } }
 
 /* Workspace chrome follows the console; terminal and editor canvases remain independent. */
+.terminal-focus-toggle{height:100%;padding:0 12px;border-left:1px solid var(--fd-line);font-size:12px;white-space:nowrap}
+#app-container .terminal-focused .splitpanes__pane:not(:has(.terminal-pane-container)){display:none!important}
+#app-container .terminal-focused .splitpanes__pane:has(.terminal-pane-container){width:100%!important;height:100%!important;max-width:none!important;max-height:none!important}
+#app-container .terminal-focused .splitpanes__splitter{display:none!important}
+#app-container .terminal-focused .layout-renderer-wrapper>.flex.flex-col.bg-sidebar{display:none!important}
 #app-container .workspace-view { height:100dvh; min-height:0; background:var(--fd-canvas); }
 #app-container .workspace-view.with-header { height:calc(100dvh - 64px); }
-#app-container .fd-terminal-tabs { flex-shrink:0; min-height:48px; margin:16px 16px 0; border:1px solid var(--fd-line); border-radius:10px 10px 0 0; background:var(--fd-surface); }
+#app-container .fd-terminal-tabs { flex-shrink:0; min-height:34px; height:34px; margin:0; border:0; border-bottom:1px solid var(--fd-line); border-radius:0; background:var(--fd-surface); }
 .fd-terminal-tabs button { gap:8px; color:var(--text-color-secondary); }
 .fd-terminal-tabs button i { color:inherit; }
 .fd-tab-action-label { font-size:12px; white-space:nowrap; }
-#app-container .workspace-view .main-content-area { margin:0 16px 16px; border:1px solid var(--fd-line); border-top:0; border-radius:0 0 10px 10px; min-height:0; }
+#app-container .workspace-view .main-content-area { margin:0; border:0; border-radius:0; min-height:0; }
 .fd-workspace-welcome { flex:1; min-height:0; overflow:auto; margin:0 16px 16px; padding:40px 28px; border:1px solid var(--fd-line); border-top:0; border-radius:0 0 10px 10px; background:var(--fd-surface); }
 .fd-workspace-intro { max-width:600px; margin:0 auto; text-align:center; padding:24px 0 36px; }
 .fd-workspace-symbol { display:inline-grid; place-items:center; width:56px; height:56px; background:var(--fd-accent-soft); border-radius:14px; color:var(--link-active-color); font-size:24px; margin-bottom:18px; }

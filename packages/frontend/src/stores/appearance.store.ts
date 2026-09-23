@@ -151,7 +151,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
     const isTerminalBackgroundEnabled = computed<boolean>(() => {
         // 提供默认值 true，如果后端没有设置或设置无效
         const enabled = appearanceSettings.value.terminalBackgroundEnabled;
-        return typeof enabled === 'boolean' ? enabled : true; // 默认启用
+        // A transparent canvas without an actual background turns the default overlay grey.
+        const hasBackground = Boolean(appearanceSettings.value.terminalBackgroundImage || appearanceSettings.value.terminal_custom_html?.trim());
+        return (typeof enabled === 'boolean' ? enabled : true) && hasBackground;
     });
  
     // 终端背景蒙版透明度

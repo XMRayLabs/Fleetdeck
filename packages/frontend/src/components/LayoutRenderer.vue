@@ -504,7 +504,7 @@ onBeforeUnmount(() => {
 
             <!-- Pane Node -->
             <template v-else-if="layoutNode.type === 'pane'">
-                <header v-if="layoutNode.component && layoutNode.component !== 'commandBar'" class="fd-pane-heading">
+                <header v-if="layoutNode.component && !['commandBar','terminal'].includes(layoutNode.component)" class="fd-pane-heading">
                   <i :class="getIconClasses(layoutNode.component)" aria-hidden="true"></i>
                   <span>{{ paneLabels[layoutNode.component] }}</span>
                 </header>

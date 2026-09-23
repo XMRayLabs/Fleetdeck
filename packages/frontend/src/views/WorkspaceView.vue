@@ -43,6 +43,10 @@ const { sessionTabsWithStatus, activeSessionId, activeSession, isRdpModalOpen, r
 const { shareFileEditorTabsBoolean, layoutLockedBoolean } = storeToRefs(settingsStore); // +++ Add layoutLockedBoolean +++
 const { orderedTabs: globalEditorTabs, activeTabId: globalActiveEditorTabId } = storeToRefs(fileEditorStore);
 const { layoutTree } = storeToRefs(layoutStore); // 只获取布局树
+const terminalFocus = ref(localStorage.getItem('fleetdeck-terminal-focus') !== 'false');
+function toggleTerminalFocus(){terminalFocus.value=!terminalFocus.value;localStorage.setItem('fleetdeck-terminal-focus',String(terminalFocus.value));}
+function containsTerminal(node:LayoutNode|null|undefined):boolean{return Boolean(node && (node.component==='terminal' || node.children?.some(containsTerminal)));}
+const canFocusTerminal=computed(()=>containsTerminal(layoutTree.value)&&sessionTabsWithStatus.value.length>0);
 
 // --- 计算属性 (用于动态绑定编辑器 Props) ---
 // 这些计算属性现在需要传递给 LayoutRenderer
@@ -705,7 +709,7 @@ const closeFileManagerModal = () => {
 
 <template>
   <!-- *** 动态 class 绑定，添加 is-mobile 类 *** -->
-  <div :class="['workspace-view', { 'with-header': isHeaderVisible, 'is-mobile': isMobile }]">
+  <div :class="['workspace-view', { 'with-header': isHeaderVisible, 'is-mobile': isMobile, 'terminal-focused': terminalFocus && canFocusTerminal && !isMobile }]">
     <!-- TerminalTabBar 始终渲染, 传递 isMobile 状态 -->
     <TerminalTabBar
         :sessions="sessionTabsWithStatus"
@@ -719,7 +723,7 @@ const closeFileManagerModal = () => {
         @close-other-sessions="handleCloseOtherSessions"
         @close-sessions-to-right="handleCloseSessionsToRight"
         @close-sessions-to-left="handleCloseSessionsToLeft"
-    />
+    ><template #workspace-tools><button v-if="!isMobile && canFocusTerminal" class="terminal-focus-toggle" :aria-pressed="terminalFocus" @click="toggleTerminalFocus">{{ t(terminalFocus ? 'terminalClipboard.restoreLayout' : 'terminalClipboard.focus') }}</button></template></TerminalTabBar>
 
     <section v-if="!showEmptyPanels && sessionTabsWithStatus.length === 0 && editorTabs.length === 0" class="fd-workspace-welcome">
       <div class="fd-workspace-intro">

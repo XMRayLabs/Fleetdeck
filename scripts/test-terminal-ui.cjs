@@ -7,10 +7,20 @@ module.exports=async function testTerminalClipboard(page,context,origin){
  await page.locator('li').filter({hasText:'clipboard-fixture'}).getByRole('button',{name:'Connect',exact:true}).click();
  const tools=page.locator('.terminal-tools');await tools.waitFor();
  await page.waitForFunction(()=>document.querySelector('.xterm-rows')?.textContent.includes('clipboard fixture ready'));
+ const workspace=await page.locator('.workspace-view').boundingBox();const focused=await page.locator('.terminal-inner-container').boundingBox();
+ assert.ok(focused.width>workspace.width*.9 && focused.height>workspace.height*.85,'Focused terminal should occupy almost the entire workspace');
+ const canvasBackground=await page.locator('.xterm-viewport').evaluate(el=>getComputedStyle(el).backgroundColor);
+ assert.ok(!['transparent','rgba(0, 0, 0, 0)','rgb(127, 127, 127)','rgb(128, 128, 128)'].includes(canvasBackground),'No image: retain the opaque terminal theme, not a grey overlay');
+ await page.getByRole('button',{name:'Restore panels',exact:true}).click();
+ const restored=await page.locator('.terminal-inner-container').boundingBox();assert.ok(restored.height<focused.height*.85);
+ await page.getByRole('button',{name:'Focus terminal',exact:true}).click();
+ assert.ok(await page.locator('.xterm-rows').textContent().then(s=>s.includes('clipboard fixture ready')),'Changing view must retain terminal output');
+ await tools.getByLabel('Terminal actions',{exact:true}).click();
  await page.evaluate(()=>{window.testClipboard='';Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.testClipboard=text;},readText:async()=>window.testClipboard}});});
  await tools.getByRole('button',{name:'Select all',exact:true}).click();
  await tools.getByRole('button',{name:/^Copy/}).click();
  assert.ok((await page.evaluate(()=>window.testClipboard)).includes('clipboard fixture ready'));assert.equal(inputs.length,0);
+ assert.equal(await page.locator('.terminal-clipboard-status').count(),0,'Successful copy must be silent');
  const terminal=page.locator('.terminal-inner-container');const keyboard=terminal.locator('textarea');await keyboard.focus();await page.keyboard.press('Control+Shift+C');assert.equal(inputs.length,0,'copy must not send SIGINT');
  await page.evaluate(()=>{window.testClipboard='printf safe';});await tools.getByRole('button',{name:/^Paste/}).click();
  await page.waitForTimeout(100);assert.deepEqual(inputs,['\x1b[200~printf safe\x1b[201~'],'must use bracketed paste exactly once');
@@ -23,6 +33,7 @@ module.exports=async function testTerminalClipboard(page,context,origin){
  await tools.getByRole('button',{name:'Select all',exact:true}).click();await terminal.dispatchEvent('contextmenu',{button:2});assert.ok((await page.evaluate(()=>window.testClipboard)).includes('clipboard fixture ready'));
  await page.evaluate(()=>{navigator.clipboard.readText=async()=>{throw new Error('denied');};});await tools.getByRole('button',{name:/^Paste/}).click();
  const fallback=page.getByRole('dialog',{name:'Manual paste',exact:true});await fallback.waitFor();await fallback.getByRole('textbox').fill('manual text');await fallback.getByRole('button',{name:'Paste into terminal',exact:true}).click();await page.waitForTimeout(100);assert.equal(inputs.at(-1),'\x1b[200~manual text\x1b[201~');
+ await tools.getByLabel('Terminal actions',{exact:true}).click();
  if(process.env.UI_SCREENSHOT_DIR)await page.screenshot({path:require('node:path').join(process.env.UI_SCREENSHOT_DIR,'terminal-clipboard.png'),fullPage:true});
  await page.goto(origin+'/',{waitUntil:'networkidle'});await context.request.delete(origin+'/api/v1/connections/'+connection.id);
  console.log('PASS terminal clipboard: toolbar, copy shortcut, SIGINT, native/shortcut paste, bracketed paste, multiline confirmation, cancel, right-click copy and permission fallback (mock SSH)');
