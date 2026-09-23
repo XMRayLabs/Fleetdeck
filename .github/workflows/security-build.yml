@@ -30,6 +30,7 @@ jobs:
       - run: node scripts/test-normalize-host.cjs
       - run: node scripts/test-connection-error.cjs
       - run: node scripts/test-rdp-controls.cjs
+      - run: node scripts/test-terminal-clipboard.cjs
       - run: node scripts/test-ai.cjs
       - run: npx playwright install --with-deps chromium
       - run: node scripts/smoke-frontend.cjs

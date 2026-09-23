@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue';
 import { registerAgentTerminal, useAgentStore } from '../stores/agent.store';
+import { copyTerminalText, needsPasteReview, terminalClipboardKey } from '../utils/terminalClipboard';
 import { useI18n } from 'vue-i18n';
 import { Terminal, ITerminalAddon, IDisposable } from 'xterm';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
@@ -34,6 +35,50 @@ const terminalOuterWrapperRef = ref<HTMLElement | null>(null); // 最外层容�
 let terminal: Terminal | null = null;
 const aiPanel = useAgentStore();
 const { t: aiT } = useI18n();
+const clipboardStatus = ref('');
+const pasteDraft = ref<string | null>(null);
+const manualPaste = ref(false);
+const hasSelection = ref(false);
+const pasteField = ref<HTMLTextAreaElement | null>(null);
+watch(pasteDraft,(value,old)=>{if(value!==null && old===null)void nextTick(()=>pasteField.value?.focus());});
+let clipboardDisposed = false;
+async function copySelection(clear = false) {
+  const text = terminal?.getSelection() || '';
+  if (!text) { clipboardStatus.value=aiT('terminalClipboard.empty');return; }
+  const copied = await copyTerminalText(text);
+  if(clipboardDisposed)return;
+  clipboardStatus.value=aiT(copied ? 'terminalClipboard.copied' : 'terminalClipboard.failed');
+  if(copied && clear)terminal?.clearSelection();
+}
+function queuePaste(text:string) {
+  if(clipboardDisposed || !text)return;
+  if(new Blob([text]).size>1048576){clipboardStatus.value=aiT('terminalClipboard.large');return;}
+  if(needsPasteReview(text)){manualPaste.value=false;pasteDraft.value=text;return;}
+  terminal?.paste(text);terminal?.focus();
+}
+async function pasteClipboard() {
+  try {const text=await navigator.clipboard.readText();queuePaste(text);}
+  catch {if(!clipboardDisposed){manualPaste.value=true;pasteDraft.value='';}}
+}
+function confirmPaste() {
+  const text=pasteDraft.value || '';
+  if(new Blob([text]).size>1048576){clipboardStatus.value=aiT('terminalClipboard.large');return;}
+  pasteDraft.value=null;terminal?.paste(text);terminal?.focus();
+}
+function cancelPaste(){pasteDraft.value=null;terminal?.focus();}
+function selectAllText(){terminal?.selectAll();}
+function scrollToLatest(){terminal?.scrollToBottom();terminal?.focus();}
+function trapPasteFocus(event:KeyboardEvent){
+  if(event.key!=='Tab')return;
+  const controls=Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('textarea,button:not(:disabled)'));
+  const next=event.shiftKey ? controls[controls.length-1] : controls[0];
+  if(document.activeElement===(event.shiftKey ? controls[0] : controls[controls.length-1])){event.preventDefault();next?.focus();}
+}
+function handleNativePaste(event:ClipboardEvent){
+  if(!event.clipboardData)return;
+  event.preventDefault();event.stopImmediatePropagation();queuePaste(event.clipboardData.getData('text/plain'));
+}
+function copyAfterSelection(event:PointerEvent){if(event.button===0 && autoCopyOnSelectBoolean.value && terminal?.hasSelection())void copySelection();}
 function analyzeSelection() {
   aiPanel.capture(props.sessionId, 'selection');
 }
@@ -186,16 +231,9 @@ const getScrollbackValue = (limit: number): number => {
 
 // --- 右键粘贴功能 ---
 const handleContextMenuPaste = async (event: MouseEvent) => {
-  event.preventDefault(); // 阻止默认右键菜单
-  try {
-    const text = await navigator.clipboard.readText();
-    if (text && terminal) {
-      const processedText = text.replace(/\r\n?/g, '\n');
-      emitWorkspaceEvent('terminal:input', { sessionId: props.sessionId, data: processedText });
-    }
-  } catch (err) {
-    console.error('[Terminal] Failed to paste via Right Click:', err);
-  }
+  if(event.shiftKey)return;
+  event.preventDefault();
+  if(terminal?.hasSelection())await copySelection(true);else await pasteClipboard();
 };
 
 const addContextMenuListener = () => {
@@ -425,26 +463,9 @@ onMounted(() => {
     }
 
     // --- 监听并处理选中即复制 ---
-    let currentSelection = ''; // 存储当前选区内容，避免重复复制空内容
     const handleSelectionChange = () => {
-        if (terminal && autoCopyOnSelectBoolean.value) {
-            const newSelection = terminal.getSelection();
-            // 仅在选区内容发生变化且不为空时执行复制
-            if (newSelection && newSelection !== currentSelection) {
-                currentSelection = newSelection;
-                navigator.clipboard.writeText(newSelection).then(() => {
-                }).catch(err => {
-                    console.error('[Terminal] 自动复制到剪贴板失败:', err);
-                    // 可以在这里向用户显示一个短暂的错误提示
-                });
-            } else if (!newSelection) {
-                // 如果新选区为空，重置 currentSelection
-                currentSelection = '';
-            }
-        } else {
-            // 如果设置关闭，也重置 currentSelection
-            currentSelection = '';
-        }
+        hasSelection.value=Boolean(terminal?.hasSelection());
+        clipboardStatus.value='';
     };
 
     // 添加防抖以避免过于频繁地触发 handleSelectionChange
@@ -454,11 +475,7 @@ onMounted(() => {
     selectionListenerDisposable = terminal.onSelectionChange(debouncedSelectionChange); // Assign to outer variable
 
     // 监听设置变化，如果关闭了自动复制，确保清除可能存在的旧选区状态
-    watch(autoCopyOnSelectBoolean, (newValue) => {
-        if (!newValue) {
-            currentSelection = '';
-        }
-    });
+    terminalRef.value?.addEventListener('pointerup',copyAfterSelection);
 
     // --- 监听外观变化 ---
     watch(effectiveTerminalTheme, (newTheme) => { // Changed from currentTerminalTheme
@@ -501,42 +518,12 @@ onMounted(() => {
         terminal.focus();
     }
 
-    // --- 添加 Ctrl+Shift+C/V 复制粘贴 ---
-    if (terminal && terminal.textarea) { // 确保 terminal 和 textarea 存在
-        terminal.textarea.addEventListener('keydown', async (event: KeyboardEvent) => {
-            // Ctrl+Shift+C for Copy
-            if (event.ctrlKey && event.shiftKey && event.code === 'KeyC') {
-                event.preventDefault(); // 阻止默认行为 (例如浏览器开发者工具)
-                event.stopPropagation(); // 阻止事件冒泡
-                const selection = terminal?.getSelection();
-                if (selection) {
-                    try {
-                        await navigator.clipboard.writeText(selection);
-                        console.log('[Terminal] Copied via Ctrl+Shift+C:', selection);
-                    } catch (err) {
-                        console.error('[Terminal] Failed to copy via Ctrl+Shift+C:', err);
-                        // 可以考虑添加 UI 提示
-                    }
-                }
-            }
-            // Ctrl+Shift+V for Paste
-            else if (event.ctrlKey && event.shiftKey && event.code === 'KeyV') {
-                event.preventDefault();
-                event.stopPropagation();
-                try {
-                    const text = await navigator.clipboard.readText();
-                    if (text) {
-                        const processedText = text.replace(/\r\n?/g, '\n');
-                        emitWorkspaceEvent('terminal:input', { sessionId: props.sessionId, data: processedText });
-                    }
-                } catch (err) {
-                    console.error('[Terminal] Failed to paste via Ctrl+Shift+V:', err);
-                    // 检查权限问题，例如 navigator.clipboard.readText 需要用户授权或安全上下文
-                    // 可以考虑添加 UI 提示
-                }
-            }
-        });
-    }
+    terminal?.attachCustomKeyEventHandler(event=>{
+      const action=terminalClipboardKey(event);if(!action)return true;
+      if(event.type==='keydown') {event.preventDefault();event.stopPropagation();if(!event.repeat){if(action==='copy')void copySelection();else void pasteClipboard();}}
+      return false;
+    });
+    terminalRef.value?.addEventListener('paste',handleNativePaste,true);
 
     // 根据初始设置添加监听器
     if (terminalEnableRightClickPasteBoolean.value) {
@@ -598,6 +585,9 @@ onMounted(() => {
 
 // 组件卸载前清理资源
 onBeforeUnmount(() => {
+  clipboardDisposed=true;pasteDraft.value=null;
+  terminalRef.value?.removeEventListener('paste',handleNativePaste,true);
+  terminalRef.value?.removeEventListener('pointerup',copyAfterSelection);
   // Ensure observer is cleaned up
   if (resizeObserver && observedElement) {
       try {
@@ -740,15 +730,37 @@ watchEffect(() => {
 
 <template>
   <div ref="terminalOuterWrapperRef" class="terminal-outer-wrapper">
+    <div v-if="isActive" class="terminal-tools" role="toolbar" :aria-label="aiT('terminalClipboard.help')">
+      <button type="button" :disabled="!hasSelection" @mousedown.prevent @click="copySelection()">{{ aiT('terminalClipboard.copy') }} <kbd>Ctrl⇧C</kbd></button>
+      <button type="button" @mousedown.prevent @click="pasteClipboard">{{ aiT('terminalClipboard.paste') }} <kbd>Ctrl⇧V</kbd></button>
+      <button type="button" @mousedown.prevent @click="selectAllText">{{ aiT('terminalClipboard.selectAll') }}</button>
+      <button type="button" @mousedown.prevent @click="scrollToLatest">{{ aiT('terminalClipboard.bottom') }}</button>
+      <button type="button" @mousedown.prevent @click="analyzeSelection">{{ aiT('ai.selection') }}</button>
+      <span :title="aiT('terminalClipboard.help')" tabindex="0" class="terminal-help">?</span>
+    </div>
+    <div v-if="clipboardStatus && isActive" class="terminal-clipboard-status" role="status">{{ clipboardStatus }}<button type="button" @click="clipboardStatus=''">×</button></div>
     <!-- xterm 实际挂载点 -->
     <div ref="terminalRef" class="terminal-inner-container"></div>
-    <button v-if="isActive" type="button" class="terminal-ai-action" @mousedown.prevent @click="analyzeSelection">{{ aiT('ai.selection') }}</button>
+    <Teleport to="body"><div v-if="pasteDraft!==null && isActive" class="terminal-paste-backdrop" @keydown.esc.stop.prevent="cancelPaste">
+      <section class="terminal-paste-dialog" role="dialog" aria-modal="true" :aria-label="aiT(manualPaste ? 'terminalClipboard.manual' : 'terminalClipboard.review')" @keydown="trapPasteFocus">
+        <h2>{{ aiT(manualPaste ? 'terminalClipboard.manual' : 'terminalClipboard.review') }}</h2>
+        <p>{{ aiT(manualPaste ? 'terminalClipboard.hint' : 'terminalClipboard.warning') }}</p>
+        <textarea ref="pasteField" v-model="pasteDraft" :aria-label="aiT('terminalClipboard.review')" rows="9" maxlength="1048576" spellcheck="false" />
+        <pre v-if="/[\x00-\x08\x0b-\x1f\x7f]/.test(pasteDraft)">{{ pasteDraft.replace(/[\x00-\x08\x0b-\x1f\x7f]/g,c=>'⟨0x'+c.charCodeAt(0).toString(16).padStart(2,'0')+'⟩') }}</pre>
+        <div><button type="button" @click="cancelPaste">{{ aiT('terminalClipboard.cancel') }}</button><button type="button" :disabled="!pasteDraft" @click="confirmPaste">{{ aiT('terminalClipboard.send') }}</button></div>
+      </section>
+    </div></Teleport>
   </div>
 </template>
 
 <style scoped>
-.terminal-ai-action { position: absolute; top: 8px; right: 20px; z-index: 3; padding: 5px 10px; border: 1px solid var(--fd-line); border-radius: 8px; background: var(--fd-surface); color: var(--text-color); font-size: 12px; }
+.terminal-tools{display:flex;align-items:center;gap:5px;padding:6px 8px;background:var(--fd-surface);border-bottom:1px solid var(--fd-line);flex-shrink:0;overflow-x:auto;white-space:nowrap}
+.terminal-tools button,.terminal-paste-dialog button{padding:5px 9px;border:1px solid var(--fd-line);border-radius:6px;background:var(--fd-subtle);color:var(--text-color);font-size:12px;cursor:pointer}.terminal-tools button:disabled{opacity:.4;cursor:default}.terminal-tools kbd{font-size:10px;color:var(--text-color-secondary);margin-left:5px}.terminal-help{cursor:help;color:var(--text-color-secondary);padding:4px}
+.terminal-clipboard-status{display:flex;justify-content:space-between;gap:10px;padding:6px 12px;font-size:12px;background:var(--fd-accent-soft);color:var(--text-color);flex-shrink:0}
+.terminal-paste-backdrop{position:fixed;inset:0;z-index:10000;background:#0008;display:grid;place-items:center;padding:16px}.terminal-paste-dialog{width:min(680px,100%);max-height:90vh;overflow:auto;padding:22px;border:1px solid var(--fd-line);border-radius:12px;background:var(--fd-surface);color:var(--text-color);box-shadow:0 20px 70px #0005}.terminal-paste-dialog h2{font-size:18px;margin:0 0 12px}.terminal-paste-dialog p{font-size:13px;line-height:1.6;margin:0 0 14px}.terminal-paste-dialog textarea{width:100%;padding:12px;border:1px solid var(--fd-line);border-radius:8px;background:var(--fd-subtle);color:var(--text-color);font:13px/1.6 Consolas,monospace;resize:vertical}.terminal-paste-dialog>div{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}.terminal-paste-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
 .terminal-outer-wrapper {
+  display:flex;
+  flex-direction:column;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -756,8 +768,9 @@ watchEffect(() => {
 }
 
 .terminal-inner-container {
+  flex:1;
+  min-height:0;
   width: 100%;
-  height: 100%;
   /* position: relative;  移除了 position relative */
   /* z-index 调整或移除，因为背景层不再在此组件内 */
 }
