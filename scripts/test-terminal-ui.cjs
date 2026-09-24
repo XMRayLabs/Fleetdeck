@@ -8,10 +8,14 @@ module.exports=async function testTerminalClipboard(page,context,origin){
  const tools=page.locator('.terminal-tools');await tools.waitFor();
  await page.waitForFunction(()=>document.querySelector('.xterm-rows')?.textContent.includes('clipboard fixture ready'));
  const workspace=await page.locator('.workspace-view').boundingBox();const focused=await page.locator('.terminal-inner-container').boundingBox();
+ assert.equal(await page.locator('.fd-topbar').isVisible(),false,'Focus mode hides the global header');
+ assert.equal(workspace.y,0,'Focus mode must reclaim the header space');
+ assert.ok(Math.abs(workspace.height-page.viewportSize().height)<2,'Focused workspace fills viewport height');
  assert.ok(focused.width>workspace.width*.9 && focused.height>workspace.height*.85,'Focused terminal should occupy almost the entire workspace');
  const canvasBackground=await page.locator('.xterm-viewport').evaluate(el=>getComputedStyle(el).backgroundColor);
  assert.ok(!['transparent','rgba(0, 0, 0, 0)','rgb(127, 127, 127)','rgb(128, 128, 128)'].includes(canvasBackground),'No image: retain the opaque terminal theme, not a grey overlay');
  await page.getByRole('button',{name:'Restore panels',exact:true}).click();
+ assert.equal(await page.locator('.fd-topbar').isVisible(),true,'Restoring panels restores the global header');
  const restored=await page.locator('.terminal-inner-container').boundingBox();assert.ok(restored.height<focused.height*.85);
  await page.getByRole('button',{name:'Focus terminal',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('.xterm-rows')?.textContent.includes('clipboard fixture ready'),{},{timeout:10000});
@@ -34,5 +38,6 @@ module.exports=async function testTerminalClipboard(page,context,origin){
  await tools.getByLabel('Terminal actions',{exact:true}).click();
  if(process.env.UI_SCREENSHOT_DIR)await page.screenshot({path:require('node:path').join(process.env.UI_SCREENSHOT_DIR,'terminal-clipboard.png'),fullPage:true});
  await page.goto(origin+'/',{waitUntil:'networkidle'});await context.request.delete(origin+'/api/v1/connections/'+connection.id);
+ assert.equal(await page.locator('.fd-topbar').isVisible(),true,'Leaving the terminal restores the global header');
  console.log('PASS terminal clipboard: toolbar, copy shortcut, SIGINT, direct multiline native/shortcut paste without prompts, bracketed paste, right-click copy and permission fallback (mock SSH)');
 };

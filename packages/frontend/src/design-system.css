@@ -163,6 +163,14 @@
 #app-container .terminal-focused .layout-renderer-wrapper>.flex.flex-col.bg-sidebar{display:none!important}
 #app-container .workspace-view { height:100dvh; min-height:0; background:var(--fd-canvas); }
 #app-container .workspace-view.with-header { height:calc(100dvh - 64px); }
+/* Focus mode keeps only the session bar above the terminal. Preserve the
+   global navigation button on narrow screens where the sidebar is hidden. */
+@media (min-width:1024px) {
+  #app-container:has(.workspace-view.terminal-focused) > .fd-topbar { display:none; }
+  #app-container .workspace-view.terminal-focused { height:100dvh; }
+  #app-container:has(.workspace-view.terminal-focused) .fd-agent-dock,
+  #app-container:has(.workspace-view.terminal-focused) .fd-agent-resize { top:0; }
+}
 #app-container .fd-terminal-tabs { flex-shrink:0; min-height:34px; height:34px; margin:0; border:0; border-bottom:1px solid var(--fd-line); border-radius:0; background:var(--fd-surface); }
 .fd-terminal-tabs button { gap:8px; color:var(--text-color-secondary); }
 .fd-terminal-tabs button i { color:inherit; }
