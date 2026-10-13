@@ -728,7 +728,7 @@ watchEffect(() => {
       <summary :aria-label="aiT('terminalClipboard.actions')" :title="aiT('terminalClipboard.actions')">⋯</summary>
       <div role="toolbar" :aria-label="aiT('terminalClipboard.help')">
       <button type="button" :disabled="!hasSelection" @mousedown.prevent @click="copySelection()">{{ aiT('terminalClipboard.copy') }} <kbd>Ctrl⇧C</kbd></button>
-      <button type="button" @mousedown.prevent @click="pasteClipboard">{{ aiT('terminalClipboard.paste') }} <kbd>Ctrl⇧V</kbd></button>
+      <button type="button" @mousedown.prevent @click="pasteClipboard">{{ aiT('terminalClipboard.paste') }} <kbd>Ctrl+V</kbd></button>
       <button type="button" @mousedown.prevent @click="selectAllText">{{ aiT('terminalClipboard.selectAll') }}</button>
       <button type="button" @mousedown.prevent @click="scrollToLatest">{{ aiT('terminalClipboard.bottom') }}</button>
       <button type="button" @mousedown.prevent @click="analyzeSelection">{{ aiT('ai.selection') }}</button>

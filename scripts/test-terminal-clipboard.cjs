@@ -6,7 +6,8 @@ const sandbox={exports:{},navigator:{clipboard:{writeText:async text=>{copied=te
 vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,sandbox);
 const {copyTerminalText,terminalClipboardKey}=sandbox.exports;
 assert.equal(terminalClipboardKey({ctrlKey:true,code:'KeyC'}),null);
-assert.equal(terminalClipboardKey({ctrlKey:true,code:'KeyV'}),null);
+assert.equal(terminalClipboardKey({ctrlKey:true,code:'KeyV'}),'paste');
+assert.equal(terminalClipboardKey({ctrlKey:true,altKey:true,code:'KeyV'}),null);
 assert.equal(terminalClipboardKey({ctrlKey:true,shiftKey:true,code:'KeyC'}),'copy');
 assert.equal(terminalClipboardKey({ctrlKey:true,shiftKey:true,code:'KeyV'}),'paste');
 assert.equal(terminalClipboardKey({ctrlKey:true,code:'Insert'}),'copy');

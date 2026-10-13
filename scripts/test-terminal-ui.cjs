@@ -31,6 +31,11 @@ module.exports=async function testTerminalClipboard(page,context,origin){
  await keyboard.evaluate(el=>{const data=new DataTransfer();data.setData('text/plain','echo first\necho second');el.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}));});
  await page.waitForTimeout(100);assert.equal(inputs.length,2);assert.equal(await page.getByRole('dialog').count(),0,'Multiline native paste must not ask for confirmation');assert.ok(inputs[1].startsWith('\x1b[200~'));
  await page.evaluate(()=>{window.testClipboard='echo first\necho second';});await keyboard.focus();await page.keyboard.press('Control+Shift+V');await page.waitForTimeout(100);assert.equal(inputs.length,3);assert.equal(await page.getByRole('dialog').count(),0,'Shortcut paste must not ask for confirmation');
+ await page.evaluate(()=>{window.testClipboard='Ctrl+V clipboard\nsecond line';});await keyboard.focus();
+ const beforeCtrlV=inputs.length;await page.keyboard.press('Control+v');await page.waitForTimeout(150);
+ assert.equal(inputs.length,beforeCtrlV+1,'Ctrl+V must paste exactly once, not send a control character');
+ assert.equal(inputs.at(-1),'\x1b[200~Ctrl+V clipboard\rsecond line\x1b[201~');
+ assert.equal(await page.getByRole('dialog').count(),0,'Ctrl+V is silent without confirmation');
  await keyboard.focus();await page.keyboard.press('Control+c');await page.waitForTimeout(100);assert.equal(inputs.at(-1),'\x03','Ctrl+C remains interrupt');
  await tools.getByRole('button',{name:'Select all',exact:true}).click();await terminal.dispatchEvent('contextmenu',{button:2});assert.ok((await page.evaluate(()=>window.testClipboard)).includes('clipboard fixture ready'));
  await page.evaluate(()=>{navigator.clipboard.readText=async()=>{throw new Error('denied');};});await tools.getByRole('button',{name:/^Paste/}).click();

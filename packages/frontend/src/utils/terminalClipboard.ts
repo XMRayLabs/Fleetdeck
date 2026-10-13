@@ -12,7 +12,8 @@ export async function copyTerminalText(text: string): Promise<boolean> {
 export function terminalClipboardKey(event: KeyboardEvent): 'copy' | 'paste' | null {
   if (event.altKey) return null;
   if (event.ctrlKey && event.shiftKey && event.code === 'KeyC' || event.metaKey && !event.ctrlKey && event.code === 'KeyC' || event.ctrlKey && event.code === 'Insert') return 'copy';
-  if (event.ctrlKey && event.shiftKey && event.code === 'KeyV' || event.shiftKey && !event.ctrlKey && event.code === 'Insert') return 'paste';
-  // Ctrl+C always remains SIGINT; Ctrl+V and Cmd+V use the browser paste event.
+  if (event.ctrlKey && event.code === 'KeyV' || event.shiftKey && !event.ctrlKey && event.code === 'Insert') return 'paste';
+  // Explicitly handle Ctrl+V before xterm consumes it as a control character.
+  // Ctrl+C remains SIGINT; Cmd+V continues using the native browser paste event.
   return null;
 }
