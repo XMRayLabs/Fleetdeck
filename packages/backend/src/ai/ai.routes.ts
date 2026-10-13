@@ -182,13 +182,15 @@ router.post('/analyze', handle(async (req, res, user) => {
 }));
 router.post('/execute', handle(async (req, res, user) => {
     if (req.body.confirm !== true) throw new Error('必须明确确认目标服务器及命令。');
+    const concurrency = req.body.concurrency ?? 5;
+    if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 20) throw new Error('并发数必须是 1–20 的整数。');
     const entry = take(req.body.proposalId, user, true);
     if (entry.fingerprint !== await fingerprint(entry.targets)) throw new Error('服务器配置已更改，请重新分析并确认。');
     if(entry.planId){planFor(user,entry.targets,entry.planId);plans.get(entry.planId)!.steps++;}
     // Only server-held targets/commands are used. A model or browser cannot substitute them.
     const temporary = req.body.ephemeralCredentials || {};
     const known = [...await secrets(user), ...Object.values(temporary).flatMap((item: any) => [item?.password, item?.passphrase]).filter((v): v is string => typeof v === 'string' && Boolean(v))];
-    const jobId = await createCommandJob({ name: 'AI · confirmed commands', targetIds: entry.targets, commands: entry.commands!, concurrency: 2, timeoutSeconds: 120, stopOnError: true, recordOutput: true, ephemeralCredentials: temporary, redactOutput: true, redactedValues: known }, user, req.session.username);
+    const jobId = await createCommandJob({ name: 'AI · confirmed commands', targetIds: entry.targets, commands: entry.commands!, concurrency, timeoutSeconds: 120, stopOnError: true, recordOutput: true, ephemeralCredentials: temporary, redactOutput: true, redactedValues: known }, user, req.session.username);
     await runDb(await db(), 'INSERT OR REPLACE INTO ai_job_context VALUES (?,?,?)', [jobId,user,encrypt(JSON.stringify({targets:entry.targets,fingerprint:entry.fingerprint,objective:entry.objective,planId:entry.planId,base:entry.base,model:entry.model}))]);
     await event(user, 'executed', jobId); res.status(202).json({ jobId });
 }));

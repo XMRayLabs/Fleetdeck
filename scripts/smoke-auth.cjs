@@ -209,6 +209,7 @@ const proxy = (req, res, port, headers) => {
   await page.route('**/api/v1/ai/execute', route => {
     const body = route.request().postDataJSON();
     assert.equal(body.proposalId, 'ui-only-proposal'); assert.equal(body.confirm, true);
+    assert.equal(body.concurrency,10);
     assert.equal(body.ephemeralCredentials[aiFixture.id].password, 'ephemeral-fixture-secret');
     assert.equal(body.commands, undefined); assert.equal(body.targetIds, undefined);
     executedAi = true;
@@ -216,6 +217,9 @@ const proxy = (req, res, port, headers) => {
   });
   await page.route('**/api/v1/ai/jobs/ui-only-job', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ job: { id: 'ui-only-job', status: 'success', targetCount: 1, completedCount: 1, targets: [{ id: 1, connectionName: 'ai-execution-fixture', status: 'success', exitCode: 0, stdout: 'Linux fixture' }] } }) }));
   await page.route('**/api/v1/ai/jobs/ui-only-job/review', route => route.fulfill({contentType:'application/json',body:JSON.stringify({previewId:'ui-review',planId:'ui-plan',round:1,targetIds:[aiFixture.id],base:'https://fixture.example/v1',model:'sample-chat',content:JSON.stringify({objective:'Review server health',execution:{stdout:'Linux fixture'}})})}));
+  await page.getByLabel('Concurrent servers (1–20)',{exact:true}).selectOption('10');
+  assert.equal(await executeAi.isDisabled(),true,'Changing concurrency requires renewed execution consent');
+  await page.getByLabel('I approve these exact commands on the targets listed below.',{exact:true}).check();
   await executeAi.click();
   await page.getByRole('heading', { name: '3 · Execution result · success' }).waitFor();
   assert.ok(executedAi); assert.equal(await executeAi.count(), 0, 'Consumed approval must disappear');

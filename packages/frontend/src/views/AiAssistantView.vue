@@ -33,6 +33,8 @@ const configOpen = ref(false); const busy = ref(false); const message = ref('');
 const preview = ref<{ previewId: string; content: string; base: string; model: string; planId?:string } | null>(null);
 const answer = ref<{ analysis: string; commands: string[]; proposalId: string | null; targetIds: number[] } | null>(null);
 const sendConsent = ref(false); const executeConsent = ref(false);
+const concurrency = ref(5);
+watch(concurrency, () => { executeConsent.value = false; });
 const passwords = ref<Record<number, string>>({});
 const events = ref<{ action: string; job_id: string | null; created_at: number }[]>([]);
 const job = ref<any>(null);
@@ -154,7 +156,7 @@ function execute() { if (!answer.value?.proposalId || !executeConsent.value) ret
     ephemeralCredentials[c.id] = c.auth_method === 'key' ? { passphrase: secret } : { password: secret };
   }
   let id: string;
-  try { id = (await api.post('/ai/execute', { proposalId: answer.value!.proposalId, confirm: true, ephemeralCredentials })).data.jobId; }
+  try { id = (await api.post('/ai/execute', { proposalId: answer.value!.proposalId, confirm: true, ephemeralCredentials, concurrency:concurrency.value })).data.jobId; }
   finally { passwords.value = {}; if (answer.value) answer.value.proposalId = null; executeConsent.value = false; }
   rounds.value++;await loadEvents(); await refreshJob(id);
   if(!activeJob.value && job.value.status!=='cancelled' && autoReview.value)await prepareReview();
@@ -239,6 +241,7 @@ onBeforeUnmount(() => { disposed = true; controller.abort();generation?.abort();
         <p class="ai-notice">{{ t('ai.executeWarning') }}</p>
         <ul class="ai-approved-targets"><li v-for="c in targets" :key="c.id">{{ c.name }} — {{ c.username }} · {{ c.host }}:{{ c.port }}</li></ul>
         <label v-for="c in promptTargets" :key="c.id">{{ c.name }} · {{ t('ai.password') }}<input v-model="passwords[c.id]" :disabled="busy" type="password" autocomplete="new-password" /></label>
+        <label>{{ t('ops.concurrency') }}<select v-model.number="concurrency" :aria-label="t('ops.concurrency')" :disabled="busy || activeJob"><option v-for="n in 20" :key="n" :value="n">{{ n }}</option></select></label>
         <label class="ai-check"><input v-model="executeConsent" :disabled="busy" type="checkbox" />{{ t('ai.executeConsent') }}</label>
         <button class="ai-primary" :disabled="busy || !executeConsent || activeJob" @click="execute">{{ t('ai.execute') }}</button>
       </template>

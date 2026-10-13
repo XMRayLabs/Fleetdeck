@@ -163,10 +163,12 @@ let server; let database;
   const answer = (await call('POST', '/analyze', { previewId: preview.previewId, confirm: true })).body;
   assert.equal(requestContent, preview.content); assert.ok(!answer.analysis.includes('do-not-display'));
   assert.ok(answer.proposalId);
+  for(const concurrency of [0,21,1.5,'10']) assert.equal((await call('POST','/execute',{proposalId:answer.proposalId,confirm:true,concurrency})).status,400);
   assert.equal((await call('POST', '/execute', { proposalId: answer.proposalId })).status, 400);
   assert.equal((await call('POST', '/execute', { proposalId: answer.proposalId, confirm: true }, 2)).status, 400);
   assert.equal((await call('POST', '/execute', { proposalId: answer.proposalId, confirm: true, targetIds: [99], commands: ['malicious substitution'], ephemeralCredentials: { 1: { password: 'transient-value' } } })).status, 202);
   assert.deepEqual(executed.input.targetIds, [1]); assert.deepEqual(executed.input.commands, ['df -h', 'uname -a']);
+  assert.equal(executed.input.concurrency,5,'Default AI concurrency is five');
   assert.ok(executed.input.redactOutput); assert.ok(executed.input.redactedValues.includes('transient-value')); assert.equal(executed.user, 1);
   assert.equal((await call('POST', '/execute', { proposalId: answer.proposalId, confirm: true })).status, 400);
   const job = await call('GET', '/jobs/fixture-job');
@@ -198,7 +200,8 @@ let server; let database;
   for(let round=0;round<5;round++){
     const p=(await call('POST','/preview',{task:'health',context:'',targetIds:[1],planId})).body;assert.ok(p.previewId);planId=p.planId;
     const a=(await call('POST','/analyze',{previewId:p.previewId,confirm:true})).body;assert.ok(a.proposalId);
-    assert.equal((await call('POST','/execute',{proposalId:a.proposalId,confirm:true})).status,202);
+    assert.equal((await call('POST','/execute',{proposalId:a.proposalId,confirm:true,concurrency:20})).status,202);
+    assert.equal(executed.input.concurrency,20,'Explicit concurrency reaches the SSH executor');
   }
   assert.equal((await call('POST','/preview',{task:'sixth round',context:'',targetIds:[1],planId})).status,400);
   const finalReview=await call('POST','/jobs/fixture-job/review',{});assert.equal(finalReview.status,200);
