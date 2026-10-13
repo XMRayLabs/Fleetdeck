@@ -215,13 +215,15 @@ const proxy = (req, res, port, headers) => {
     return route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ jobId: 'ui-only-job' }) });
   });
   await page.route('**/api/v1/ai/jobs/ui-only-job', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ job: { id: 'ui-only-job', status: 'success', targetCount: 1, completedCount: 1, targets: [{ id: 1, connectionName: 'ai-execution-fixture', status: 'success', exitCode: 0, stdout: 'Linux fixture' }] } }) }));
+  await page.route('**/api/v1/ai/jobs/ui-only-job/review', route => route.fulfill({contentType:'application/json',body:JSON.stringify({previewId:'ui-review',planId:'ui-plan',round:1,targetIds:[aiFixture.id],base:'https://fixture.example/v1',model:'sample-chat',content:JSON.stringify({objective:'Review server health',execution:{stdout:'Linux fixture'}})})}));
   await executeAi.click();
   await page.getByRole('heading', { name: '3 · Execution result · success' }).waitFor();
   assert.ok(executedAi); assert.equal(await executeAi.count(), 0, 'Consumed approval must disappear');
   await page.getByRole('button', { name: 'Use result for another analysis' }).click();
-  assert.ok((await page.getByLabel('Selected terminal text / logs', { exact: true }).inputValue()).includes('Linux fixture'));
-  assert.equal(await page.getByRole('button', { name: 'Send to AI', exact: true }).count(), 0, 'Follow-up must require a new preview');
-  for (const pattern of ['**/api/v1/ai/analyze', '**/api/v1/ai/execute', '**/api/v1/ai/jobs/ui-only-job']) await page.unroute(pattern);
+  await page.getByTestId('ai-preview').waitFor();
+  assert.ok((await page.getByTestId('ai-preview').textContent()).includes('Linux fixture'));
+  assert.equal(await page.getByRole('button', { name: 'Send to AI', exact: true }).isDisabled(), true, 'Server result preview requires fresh sending consent');
+  for (const pattern of ['**/api/v1/ai/analyze', '**/api/v1/ai/execute', '**/api/v1/ai/jobs/ui-only-job', '**/api/v1/ai/jobs/ui-only-job/review']) await page.unroute(pattern);
   await page.locator('.ai-context-panel summary').filter({hasText:'Saved conversations'}).click();
   await page.getByRole('button',{name:'Save encrypted conversation',exact:true}).click();
   await page.getByRole('button',{name:'Load as history',exact:true}).waitFor();

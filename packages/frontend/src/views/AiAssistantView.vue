@@ -141,7 +141,7 @@ async function refreshJob(id: string) {
   if (disposed) return;
   const wasRunning=activeJob.value;
   job.value = result.data.job;
-  if(wasRunning && !activeJob.value && autoReview.value && rounds.value<5) follow();
+  if(wasRunning && !activeJob.value && job.value.status!=='cancelled' && autoReview.value && !busy.value) follow();
   if (activeJob.value) poll = setTimeout(() => {
     void refreshJob(id).catch(() => { if (!disposed) error.value = t('ai.failed'); });
   }, 2500);
@@ -157,10 +157,19 @@ function execute() { if (!answer.value?.proposalId || !executeConsent.value) ret
   try { id = (await api.post('/ai/execute', { proposalId: answer.value!.proposalId, confirm: true, ephemeralCredentials })).data.jobId; }
   finally { passwords.value = {}; if (answer.value) answer.value.proposalId = null; executeConsent.value = false; }
   rounds.value++;await loadEvents(); await refreshJob(id);
-  if(!activeJob.value && autoReview.value && rounds.value<5)follow();
+  if(!activeJob.value && job.value.status!=='cancelled' && autoReview.value)await prepareReview();
 }); }
 function stop() { void run(async () => { await api.post('/ai/jobs/' + encodeURIComponent(job.value.id) + '/cancel'); message.value = t('ai.cancelled'); await refreshJob(job.value.id); }); }
-function follow() { context.value = JSON.stringify(job.value, null, 2).slice(0, 64000); task.value=t('ops.reviewResult'); invalidate(); }
+async function prepareReview() {
+  if(!job.value || activeJob.value || job.value.status==='cancelled')return;
+  const result=(await api.post('/ai/jobs/'+encodeURIComponent(job.value.id)+'/review',{}, {signal:controller.signal})).data;
+  // Scope comes from the executed job, not whichever devices are now selected.
+  selected.value=result.targetIds; task.value=''; context.value=''; await nextTick();
+  invalidate();preview.value=result;planId.value=result.planId;rounds.value=result.round;
+  currentTask.value=JSON.parse(result.content).objective || t('ops.reviewResult');currentModel.value=result.model;
+  await scrollThread();
+}
+function follow() {void run(prepareReview);}
 onMounted(() => { void run(async () => {
   await loadConfig();
   await nextTick();
@@ -238,7 +247,7 @@ onBeforeUnmount(() => { disposed = true; controller.abort();generation?.abort();
     <section v-if="job" class="ai-card ai-stage">
       <h2>{{ t('ai.job') }} · {{ job.status }}</h2>
       <p class="ai-muted">{{ job.id }} · {{ job.completedCount }}/{{ job.targetCount }}</p>
-      <div class="ai-actions"><button :disabled="busy" @click="run(() => refreshJob(job.id))">{{ t('ai.refresh') }}</button><button v-if="activeJob" :disabled="busy" @click="stop">{{ t('ai.stop') }}</button><button :disabled="busy" @click="follow">{{ t('ai.follow') }}</button></div>
+      <div class="ai-actions"><button :disabled="busy" @click="run(() => refreshJob(job.id))">{{ t('ai.refresh') }}</button><button v-if="activeJob" :disabled="busy" @click="stop">{{ t('ai.stop') }}</button><button :disabled="busy || activeJob || job.status==='cancelled'" @click="follow">{{ t('ai.follow') }}</button></div>
       <details v-for="target in job.targets" :key="target.id">
         <summary>{{ target.connectionName }} · {{ target.status }} · {{ target.exitCode }}</summary>
         <pre class="ai-code ai-output">{{ target.stdout }}{{ target.stderr }}{{ target.error }}</pre>
