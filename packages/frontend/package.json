@@ -34,7 +34,7 @@
       "@vueuse/core": "^13.9.0",
       "@xterm/addon-fit": "^0.10.0",
       "@xterm/addon-search": "^0.15.0",
-      "axios": "^1.8.4",
+      "axios": "^1.20.0",
       "buffer": "^6.0.3",
       "chart.js": "^4.4.9",
       "date-fns": "^4.1.0",
