@@ -41,7 +41,7 @@ assert.equal(redact('sshd: connection timed out on port 22'), 'sshd: connection 
 assert.equal(JSON.parse(JSON.stringify(redactValue({ message: quoted, password: 'another' }, [quoted]))).password, '[REDACTED]');
 for (const ip of ['127.0.0.1', '10.0.0.1', '169.254.169.254', '172.16.0.1', '192.168.1.1', '100.64.1.1', '198.18.0.1', '::1', '::ffff:127.0.0.1', 'fe80::1', 'fc00::1', '2001:db8::1', '2002:7f00:1::']) assert.equal(provider.publicAddress(ip), false, ip);
 for (const ip of ['8.8.8.8', '1.1.1.1', '2606:4700:4700::1111']) assert.equal(provider.publicAddress(ip), true, ip);
-for (const base of ['http://example.com', 'https://u:p@example.com', 'https://example.com?q=1', 'https://example.com:8080']) assert.throws(() => provider.endpoint(base));
+for (const base of ['ftp://example.com', 'file:///etc/passwd', 'https://u:p@example.com', 'https://example.com?q=1', 'http://example.com/#fragment']) assert.throws(() => provider.endpoint(base));
 assert.equal(provider.endpoint('https://example.com/v1/').href, 'https://example.com/v1/chat/completions');
 console.log('PASS AI redaction and provider address policy');
 
@@ -66,16 +66,24 @@ app.use((req, _res, next) => { req.session = { userId: Number(req.get('fixture-u
 app.use('/ai', require(path.join(root, 'ai/ai.routes')).default);
 let server; let database;
 (async () => {
+  // Exercise the actual HTTP transport against an isolated local API, not CPA.
+  const localHttp=require('node:http');let localCalls=0;
+  const localApi=localHttp.createServer((req,res)=>{localCalls++;assert.equal(req.headers.authorization,'Bearer fixture-key');let body='';req.on('data',chunk=>body+=chunk);req.on('end',()=>{res.setHeader('Content-Type','application/json');if(req.url==='/v1/models'){assert.equal(req.method,'GET');res.end(JSON.stringify({data:[{id:'local-chat'}]}));}else{assert.equal(req.url,'/v1/chat/completions');assert.equal(JSON.parse(body).model,'local-chat');res.end(JSON.stringify({choices:[{message:{content:'local HTTP works'}}]}));}});});
+  await new Promise(resolve=>localApi.listen(0,'127.0.0.1',resolve));
+  try{const base=`http://127.0.0.1:${localApi.address().port}/v1`;assert.equal((await realDiscoverModels(base,'fixture-key')).suggestedModel,'local-chat');assert.equal(await realAskProvider(base,'fixture-key','local-chat','test'),'local HTTP works');assert.equal(localCalls,2);}finally{await new Promise(resolve=>localApi.close(resolve));}
+  console.log('PASS real HTTP transport: local custom-port model discovery and chat');
   const dns = require('node:dns/promises'); const https = require('node:https'); const { EventEmitter } = require('node:events');
+  const http = require('node:http'); const originalHttp = http.request;
+  let apiBase='https://fixture.example/v1';
   const originalLookup = dns.lookup; const originalRequest = https.request;
   let records = [{ address: '127.0.0.1', family: 4 }]; let calls = 0; let status = 200; let oversized = false; let listing = false; let streamFixture=false;let streamDone=true;
   dns.lookup = async () => records;
-  https.request = (url, options, callback) => {
+  const mockRequest = (url, options, callback) => {
     calls++;
-    assert.equal(url.href, 'https://fixture.example/v1/' + (listing ? 'models' : 'chat/completions'));
+    assert.equal(url.href, apiBase + '/' + (listing ? 'models' : 'chat/completions'));
     assert.equal(options.method, listing ? 'GET' : 'POST');
-    options.lookup('fixture.example', {}, (_error, address) => assert.equal(address, '8.8.8.8', 'DNS must remain pinned'));
-    options.lookup('fixture.example', { all: true }, (_error, values) => assert.equal(values[0].address, '8.8.8.8'));
+    options.lookup('fixture.example', {}, (_error, address) => assert.equal(address, records[0].address, 'DNS must remain pinned'));
+    options.lookup('fixture.example', { all: true }, (_error, values) => assert.equal(values[0].address, records[0].address));
     assert.equal(options.rejectUnauthorized, undefined, 'Must not disable TLS verification');
     const req = new EventEmitter();
     req.destroy = error => { req.emit('error', error); req.emit('close'); };
@@ -92,27 +100,33 @@ let server; let database;
     };
     return req;
   };
+  https.request=(url,options,callback)=>{assert.equal(url.protocol,'https:');return mockRequest(url,options,callback);};
+  http.request=(url,options,callback)=>{assert.equal(url.protocol,'http:');return mockRequest(url,options,callback);};
   try {
-    await assert.rejects(realAskProvider('https://fixture.example/v1', 'key', 'model', 'logs'));
-    assert.equal(calls, 0, 'Private DNS must be rejected before network use');
+    assert.equal(await realAskProvider(apiBase,'key','model','logs'),'fixture');
     records = [{ address: '8.8.8.8', family: 4 }, { address: '10.0.0.1', family: 4 }];
-    await assert.rejects(realAskProvider('https://fixture.example/v1', 'key', 'model', 'logs')); assert.equal(calls, 0);
+    assert.equal(await realAskProvider(apiBase,'key','model','logs'),'fixture');
     records = [{ address: '8.8.8.8', family: 4 }];
     assert.equal(await realAskProvider('https://fixture.example/v1', 'key', 'model', 'logs'), 'fixture');
     status = 302; await assert.rejects(realAskProvider('https://fixture.example/v1', 'key', 'model', 'logs'), /HTTP 302/);
-    assert.equal(calls, 2, 'Redirect must not issue a follow-up request');
+    assert.equal(calls, 4, 'Redirect must not issue a follow-up request');
     status = 200; oversized = true; await assert.rejects(realAskProvider('https://fixture.example/v1', 'key', 'model', 'logs'));
     listing = true; oversized = false;
     assert.equal((await realDiscoverModels('https://fixture.example/v1', 'key')).suggestedModel, 'fixture-chat');
     records = [{ address: '127.0.0.1', family: 4 }];
-    await assert.rejects(realDiscoverModels('https://fixture.example/v1', 'key'));
+    assert.equal((await realDiscoverModels(apiBase,'key')).suggestedModel,'fixture-chat');
+    for(const base of ['http://192.168.1.10:8317/v1','http://127.0.0.1:8317/v1','http://[::1]:8317/v1','http://cpa:8317/v1','http://host.docker.internal:8317/v1','https://fixture.example:8443/v1']){
+      apiBase=base;listing=true;assert.equal((await realDiscoverModels(base,'key')).suggestedModel,'fixture-chat');
+      listing=false;assert.equal(await realAskProvider(base,'key','model','logs'),'fixture');
+    }
+    apiBase='https://fixture.example/v1';
     records=[{address:'8.8.8.8',family:4}];listing=false;oversized=false;status=200;streamFixture=true;let partial='';
     assert.equal(await realAskProvider('https://fixture.example/v1','key','model','logs',{onDelta:text=>{partial=text;}}),'服务器');assert.equal(partial,'服务器');
     streamDone=false;await assert.rejects(realAskProvider('https://fixture.example/v1','key','model','logs',{onDelta:()=>{}}));
     const abort=new AbortController();abort.abort();await assert.rejects(realAskProvider('https://fixture.example/v1','key','model','logs',{signal:abort.signal}));
     streamFixture=false;
-    console.log('PASS AI transport: private/mixed DNS blocked, DNS pinned, redirects rejected, oversized response rejected; UTF-8 streaming, incomplete stream rejection, abort');
-  } finally { dns.lookup = originalLookup; https.request = originalRequest; }
+    console.log('PASS AI transport: HTTP/HTTPS, custom ports, private IPs and Docker names, DNS pinned, redirects rejected, oversized response rejected; UTF-8 streaming, incomplete stream rejection, abort');
+  } finally { dns.lookup = originalLookup; https.request = originalRequest; http.request=originalHttp; }
   database = await dbApi.getDbInstance();
   await dbApi.runDb(database, 'INSERT INTO users (id,username,hashed_password) VALUES (1,?,?)', ['fixture', 'not-a-login-hash']);
   await dbApi.runDb(database, 'INSERT INTO connections (id,name,type,host,port,username,auth_method,encrypted_password) VALUES (1,?,?,?,?,?,?,?)', ['fixture', 'SSH', '192.0.2.1', 22, 'root', 'password', encrypt(quoted)]);
@@ -125,7 +139,7 @@ let server; let database;
   };
   assert.equal((await call('GET', '/config', null, 0)).status, 401);
   assert.equal((await call('POST', '/models', {}, 0)).status, 401);
-  assert.equal((await call('POST', '/models', { base: 'http://example.com', apiKey: 'key' }, 3)).status, 400);
+  assert.equal((await call('POST', '/models', { base: 'http://cpa:8317/v1', apiKey: 'key' }, 3)).status, 200);
   const modelConfig = { base: 'https://example.com/v1', apiKey: 'model-fixture-key' };
   const catalog = await call('POST', '/models', modelConfig, 3);
   assert.equal(catalog.status, 200); assert.equal(catalog.body.suggestedModel, 'sample-chat');

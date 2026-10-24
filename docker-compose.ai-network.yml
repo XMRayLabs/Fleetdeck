@@ -1,0 +1,10 @@
+# Optional: attach only backend to an existing network shared with your AI API.
+services:
+  backend:
+    networks:
+      - ai-api-network
+
+networks:
+  ai-api-network:
+    external: true
+    name: ${AI_API_NETWORK:-ai-api}

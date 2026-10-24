@@ -1,4 +1,5 @@
 import https from 'node:https';
+import http from 'node:http';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { StringDecoder } from 'node:string_decoder';
@@ -14,7 +15,7 @@ export function publicAddress(address: string): boolean {
 }
 export function endpoint(base: string, resource: 'chat/completions' | 'models' = 'chat/completions'): URL {
     const url = new URL(base);
-    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || (url.port && url.port !== '443')) throw new Error('API 地址必须是无凭据、无查询参数的 HTTPS 地址（443 端口）。');
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('API 地址必须是无内嵌凭据、无查询参数的 HTTP 或 HTTPS 地址。');
     url.pathname = url.pathname.replace(/\/+$/, '') + '/' + resource;
     return url;
 }
@@ -25,13 +26,14 @@ async function requestJson(base: string, key: string, resource: 'chat/completion
         lookup(url.hostname.replace(/^\[|\]$/g, ''), { all: true }),
         new Promise<never>((_resolve, reject) => { dnsTimer = setTimeout(() => reject(new Error('DNS timeout')), 5000); }),
     ]).catch(() => { throw new Error('AI API DNS resolution failed.'); }).finally(() => clearTimeout(dnsTimer));
-    if (!records.length || records.some(record => !publicAddress(record.address))) throw new Error('AI API 不允许指向内网、回环或保留地址。');
+    if (!records.length) throw new Error('AI API DNS resolution returned no addresses.');
     const record = records[0];
     const body = payload === undefined ? undefined : JSON.stringify(payload);
     if (options.signal?.aborted) throw new Error('AI request cancelled.');
     return new Promise((resolve, reject) => {
         // Pin DNS resolution. No redirects, environment proxies or TLS verification bypass.
-        const request = https.request(url, { method: body === undefined ? 'GET' : 'POST', lookup: ((_host: any, options: any, callback: any) => {
+        const transport = url.protocol === 'http:' ? http : https;
+        const request = transport.request(url, { method: body === undefined ? 'GET' : 'POST', lookup: ((_host: any, options: any, callback: any) => {
             if (options?.all) callback(null, [record]); else callback(null, record.address, record.family);
         }) as any, headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', ...(body === undefined ? {} : { 'Content-Length': Buffer.byteLength(body) }) } }, response => {
             const chunks: Buffer[] = []; let size = 0;
