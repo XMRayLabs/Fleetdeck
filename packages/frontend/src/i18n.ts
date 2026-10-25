@@ -1,5 +1,6 @@
 import { createI18n, Composer } from 'vue-i18n';
 import { aiMessages, agentMessages } from './locales/ai';
+import { workbenchMessages } from './locales/workbench';
 import { opsMessages } from './locales/ops';
 import { terminalClipboardMessages } from './locales/terminalClipboard';
 
@@ -28,6 +29,7 @@ for (const path in localeModules) {
       messages[locale].ops.limits = locale === 'zh-CN' ? '每个计划最多 5 轮 / 15 分钟；每轮都需人工确认' : locale === 'ja-JP' ? '計画ごとに最大 5 回 / 15 分。毎回承認が必要' : 'Up to 5 rounds / 15 minutes per plan; approval required every round';
       messages[locale].ui.pages.Monitoring = messages[locale].ops.description;
       messages[locale].agent = agentMessages[locale as keyof typeof agentMessages];
+      messages[locale].wb = workbenchMessages[locale] || workbenchMessages['en-US'];
       messages[locale].agent.saveFirst = locale === 'zh-CN' ? '请先保存新的 API / 模型设置。' : locale === 'ja-JP' ? '変更した API / モデル設定を先に保存してください。' : 'Save the changed API / model settings first.';
       messages[locale].ui.pages.AiAssistant = ai.description;
     }

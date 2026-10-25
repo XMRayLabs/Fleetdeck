@@ -9,6 +9,7 @@ import { redact, redactValue, liveAnalysis } from './redact';
 import { endpoint, askProvider, discoverModels } from './provider';
 import { resourceRouter, inventory, monitorSnapshot } from './resources';
 import { reviewEvidence } from './evidence';
+import { agentRunRouter } from './agent-runs';
 
 const router = Router();
 type Config = { base: string; model: string; key: string };
@@ -84,6 +85,7 @@ router.use(isAuthenticated);
 router.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 router.use(rateLimit({ windowMs: 60000, limit: 120, keyGenerator: req => String(req.session.userId), standardHeaders: true, legacyHeaders: false }));
 router.use('/context', resourceRouter(secrets));
+router.use('/runs', agentRunRouter({config,secrets,fingerprint,event}));
 router.use(['/analyze', '/test', '/models'], rateLimit({ windowMs: 60000, limit: 20, keyGenerator: req => String(req.session.userId), standardHeaders: true, legacyHeaders: false }));
 router.get('/config', handle(async (_req, res, user) => { const c = await config(user); res.json({ base: c.base, model: c.model, hasKey: Boolean(c.key) }); }));
 router.post('/models', handle(async (req, res, user) => {

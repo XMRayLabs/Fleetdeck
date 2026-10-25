@@ -341,7 +341,7 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
       </nav>
     </div>
     <main :class="['fd-console', { 'fd-main-offset': showDesktopSidebar, 'fd-with-agent': agent.open && route.path !== '/ai' }]" :style="{ '--agent-width': agent.width + 'px' }">
-      <ConsolePageHeader v-if="showDesktopSidebar && !isWorkspaceRoute" :title="currentPageTitle" :description="t(`ui.pages.${String(route.name)}`)" />
+      <ConsolePageHeader v-if="showDesktopSidebar && !isWorkspaceRoute && route.path !== '/ai'" :title="currentPageTitle" :description="t(`ui.pages.${String(route.name)}`)" />
       <div :class="{ 'fd-page-content': showDesktopSidebar && !isWorkspaceRoute }">
         <RouterView v-slot="{ Component }">
           <KeepAlive :include="['WorkspaceView', 'ConnectionsView']"><component :is="Component" /></KeepAlive>
@@ -403,14 +403,10 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
 .fd-topbar>div:first-child{min-width:0;flex:1}.fd-topbar>div:last-child{flex-shrink:0}.fd-breadcrumb{min-width:0;overflow:hidden}.fd-breadcrumb strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:600px){.fd-breadcrumb>a,.fd-breadcrumb>span{display:none}}
 .fd-agent-dock{position:fixed;right:0;top:64px;bottom:0;z-index:40;overflow:auto;padding:14px;box-sizing:border-box;background:var(--fd-subtle);border-left:1px solid var(--fd-line);box-shadow:-8px 0 24px #0001;width:var(--agent-width)}
-.fd-agent-full{padding:0 32px 40px}.fd-with-agent{width:calc(100% - var(--agent-width))}
-@media(max-width:900px){.fd-agent-dock{width:100vw}.fd-with-agent{width:100%}.fd-agent-full{padding:0 16px 24px}.fd-agent-resize{display:none}}
+.fd-agent-full{padding:18px 24px 20px}main.fd-console.fd-with-agent{width:calc(100% - var(--agent-width));box-sizing:border-box}
+@media(max-width:900px){.fd-agent-dock{width:100vw}main.fd-console.fd-with-agent{width:100%}.fd-agent-full{padding:12px}.fd-agent-resize{display:none}}
 .fd-agent-resize{position:fixed;top:64px;bottom:0;width:6px;cursor:ew-resize;touch-action:none;margin-left:-17px}
 .fd-agent-dock-header{display:flex;align-items:center;justify-content:space-between;margin:-14px -14px 12px;padding:12px 14px;position:sticky;top:-14px;z-index:2;background:var(--fd-surface);border-bottom:1px solid var(--fd-line)}
-.fd-agent-dock :deep(.ai-workbench),.fd-agent-dock :deep(.ai-config){grid-template-columns:1fr}
-.fd-agent-dock :deep(.ai-context-panel){grid-row:1}
-.fd-agent-dock :deep(.ai-card),.fd-agent-dock :deep(.ai-transcript),.fd-agent-dock :deep(.ai-composer-shell){padding:14px}
-.fd-agent-dock :deep(.ai-server-list){max-height:140px}
 #app-container {
   display: flex;
   flex-direction: column;
