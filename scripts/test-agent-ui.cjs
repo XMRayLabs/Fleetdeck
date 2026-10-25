@@ -217,6 +217,8 @@ module.exports = async (page, context, origin) => {
   await page.locator(".consent input").check();
   await start.click();
   await page.locator(".approval-card").waitFor();
+  await page.locator(".task-item").filter({ hasText: "Check system" }).click();
+  await page.getByLabel("Temporary SSH password", { exact: true }).waitFor();
   assert.equal(created.settings.model, "fixture-instruct");
   assert.equal(created.settings.reasoning, "high");
   assert.equal(created.settings.concurrency, 12);

@@ -316,6 +316,17 @@ async function credentials(
 }
 export function agentRunRouter(deps: Deps) {
   const router = Router();
+  async function capacity(user: number, id: string) {
+    const count = await getDb(
+      await database(),
+      "SELECT COUNT(*) AS n FROM ai_agent_runs WHERE user_id=? AND id<>? AND phase IN ('thinking','executing','approval','paused')",
+      [user, id],
+    );
+    if (count.n >= 5)
+      throw new Error(
+        "Finish or stop an existing task (maximum 5 active tasks).",
+      );
+  }
   async function known(run: Run, session?: Record<string, any>) {
     return [
       ...(await deps.secrets(run.user)),
@@ -580,7 +591,7 @@ export function agentRunRouter(deps: Deps) {
     };
   const mutate = (fn: (req: any, res: any, user: number) => Promise<void>) =>
     handle(async (req, res, user) => {
-      const id = req.params.id || `new:${user}`;
+      const id = `user:${user}`;
       if (locks.has(id)) throw new Error("Task update in progress.");
       locks.add(id);
       try {
@@ -769,6 +780,7 @@ export function agentRunRouter(deps: Deps) {
         );
       await validate(run);
       const settings = runSettings(req.body.settings, run.settings.model);
+      if (terminal.has(run.phase)) await capacity(user, run.id);
       if (settings.mode !== "analysis" && !run.targetIds.length)
         throw new Error("This discussion has no SSH scope. Start a new task.");
       if (
@@ -851,6 +863,7 @@ export function agentRunRouter(deps: Deps) {
         req.body.message.length > 8000
       )
         throw new Error("Enter a message (maximum 8000 characters).");
+      if (terminal.has(run.phase)) await capacity(user, run.id);
       await validate(run);
       run.approval = undefined;
       run.error = undefined;

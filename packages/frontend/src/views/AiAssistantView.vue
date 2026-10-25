@@ -173,6 +173,7 @@ function openRun(id: string) {
     tasksOpen.value = false;
     approvalConsent.value = false;
     passwords.value = {};
+    for (const c of promptTargets.value) passwords.value[c.id] = {};
     await scroll();
     schedule();
   });
