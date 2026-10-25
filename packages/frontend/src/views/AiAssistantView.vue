@@ -168,17 +168,22 @@ function schedule() {
 }
 function openRun(id: string) {
   void perform(async () => {
+    resetApprovalInputs();
     current.value = (await api.get("/ai/runs/" + id)).data;
     message.value = "";
     tasksOpen.value = false;
-    approvalConsent.value = false;
-    passwords.value = {};
-    for (const c of promptTargets.value) passwords.value[c.id] = {};
+    resetApprovalInputs();
     await scroll();
     schedule();
   });
 }
+function resetApprovalInputs() {
+  approvalConsent.value = false;
+  passwords.value = {};
+  for (const c of promptTargets.value) passwords.value[c.id] = {};
+}
 function fresh() {
+  if (busy.value) return;
   current.value = null;
   task.value = "";
   context.value = "";
@@ -446,14 +451,7 @@ watch(
   },
   { deep: true },
 );
-watch(
-  () => current.value?.approval?.id,
-  () => {
-    approvalConsent.value = false;
-    passwords.value = {};
-    for (const c of promptTargets.value) passwords.value[c.id] = {};
-  },
-);
+watch(() => current.value?.approval?.id, resetApprovalInputs);
 watch(
   () => agent.attachment,
   (value) => {
@@ -519,7 +517,9 @@ onBeforeUnmount(() => {
     <aside class="agent-rail" :class="{ 'is-open': tasksOpen }">
       <div class="rail-heading">
         <strong>{{ t("wb.tasks") }}</strong
-        ><button type="button" @click="fresh">＋ {{ t("wb.newTask") }}</button>
+        ><button type="button" :disabled="busy" @click="fresh">
+          ＋ {{ t("wb.newTask") }}
+        </button>
         <button
           class="rail-close"
           @click="tasksOpen = false"
@@ -535,6 +535,7 @@ onBeforeUnmount(() => {
           :key="run.id"
           class="task-item"
           :class="{ chosen: current?.id === run.id }"
+          :disabled="busy"
           @click="openRun(run.id)"
         >
           <span class="task-title"
@@ -848,6 +849,7 @@ onBeforeUnmount(() => {
                   }}<input
                     v-if="passwords[c.id]"
                     v-model="passwords[c.id].password"
+                    :disabled="busy"
                     type="password"
                     autocomplete="off" /></label
                 ><label v-if="c.auth_method === 'key'"
@@ -855,15 +857,18 @@ onBeforeUnmount(() => {
                   }}<input
                     v-if="passwords[c.id]"
                     v-model="passwords[c.id].passphrase"
+                    :disabled="busy"
                     type="password"
                     autocomplete="off"
                 /></label>
               </div>
             </div>
             <label class="check"
-              ><input v-model="approvalConsent" type="checkbox" />{{
-                t("wb.approveConsent")
-              }}</label
+              ><input
+                v-model="approvalConsent"
+                :disabled="busy"
+                type="checkbox"
+              />{{ t("wb.approveConsent") }}</label
             ><button
               class="primary"
               :disabled="busy || !approvalConsent"

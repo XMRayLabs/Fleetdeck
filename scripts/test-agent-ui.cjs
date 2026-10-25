@@ -5,6 +5,7 @@ module.exports = async (page, context, origin) => {
   let modelReads = 0,
     created,
     approved,
+    heldTaskRead,
     run = null;
   await page.route("**/api/v1/ai/models", (r) => {
     modelReads++;
@@ -33,6 +34,16 @@ module.exports = async (page, context, origin) => {
       url = new URL(req.url()),
       suffix = url.pathname.split("/ai/runs")[1];
     if (suffix === "/preview") return route.continue();
+    if (
+      heldTaskRead &&
+      req.method() === "GET" &&
+      suffix === "/ui-task" &&
+      !url.searchParams.has("revision")
+    ) {
+      const pending = heldTaskRead;
+      heldTaskRead = null;
+      await pending;
+    }
     const body = req.method() === "POST" ? req.postDataJSON() : {};
     if (!suffix && req.method() === "POST") {
       created = body;
@@ -217,8 +228,42 @@ module.exports = async (page, context, origin) => {
   await page.locator(".consent input").check();
   await start.click();
   await page.locator(".approval-card").waitFor();
-  await page.locator(".task-item").filter({ hasText: "Check system" }).click();
-  await page.getByLabel("Temporary SSH password", { exact: true }).waitFor();
+  const temporaryPassword = page.getByLabel("Temporary SSH password", {
+    exact: true,
+  });
+  const approvalConsent = page.getByLabel(
+    "I approve these exact commands on the listed servers.",
+    { exact: true },
+  );
+  let releaseTaskRead;
+  heldTaskRead = new Promise((resolve) => {
+    releaseTaskRead = resolve;
+  });
+  const taskReadRequested = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      request.method() === "GET" &&
+      url.pathname.endsWith("/ai/runs/ui-task") &&
+      !url.searchParams.has("revision")
+    );
+  });
+  try {
+    await page
+      .locator(".task-item")
+      .filter({ hasText: "Check system" })
+      .click();
+    await taskReadRequested;
+    assert.ok(
+      await temporaryPassword.isDisabled(),
+      "Do not accept credentials while a task reload can clear them",
+    );
+    assert.ok(
+      await approvalConsent.isDisabled(),
+      "Do not approve a task that is still loading",
+    );
+  } finally {
+    releaseTaskRead();
+  }
   assert.equal(created.settings.model, "fixture-instruct");
   assert.equal(created.settings.reasoning, "high");
   assert.equal(created.settings.concurrency, 12);
@@ -236,14 +281,8 @@ module.exports = async (page, context, origin) => {
     exact: true,
   });
   assert.ok(await approve.isDisabled());
-  await page
-    .getByLabel("Temporary SSH password", { exact: true })
-    .fill("ephemeral-ui-secret");
-  await page
-    .getByLabel("I approve these exact commands on the listed servers.", {
-      exact: true,
-    })
-    .check();
+  await temporaryPassword.fill("ephemeral-ui-secret");
+  await approvalConsent.check();
   await approve.click();
   await page.getByText("Verified from SSH output.", { exact: true }).waitFor();
   assert.equal(approved.approvalId, "exact-approval");
