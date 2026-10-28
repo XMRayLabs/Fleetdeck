@@ -298,7 +298,8 @@ export const createCommandJob = async (
 
     const targets = await getTargetSnapshots(targetIds);
     const concurrency = clampInteger(input.concurrency, 5, 1, 20);
-    const timeoutSeconds = clampInteger(input.timeoutSeconds, 300, 5, 3600);
+    // Explicit zero disables the command deadline. Omitted values retain batch defaults.
+    const timeoutSeconds = input.timeoutSeconds === 0 ? 0 : clampInteger(input.timeoutSeconds, 300, 5, 3600);
     const name = String(input.name || '').trim().slice(0, 120) || `批量命令 · ${new Date().toLocaleString('zh-CN')}`;
     return createJob(
         name,
@@ -397,7 +398,7 @@ const appendLimited = (chunks: Buffer[], chunk: Buffer, state: { size: number; t
     if (chunk.length > remaining) state.truncated = true;
 };
 
-const execScript = (
+export const execScript = (
     client: Client,
     commands: string[],
     stopOnError: boolean,
@@ -411,22 +412,32 @@ const execScript = (
     const stdoutState = { size: 0, truncated: false };
     const stderrState = { size: 0, truncated: false };
     let streamRef: ClientChannel | null = null;
-
-    const timer = setTimeout(() => {
+    const connectionClosed = () => {
         if (settled) return;
         settled = true;
+        clearTimeout(timer);
+        reject(new Error('SSH connection closed before the command completed.'));
+    };
+    client.once('close', connectionClosed);
+
+    const timer = timeoutMs > 0 ? setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        client.removeListener('close', connectionClosed);
         try { streamRef?.close(); } catch { /* connection cleanup follows */ }
         reject(new Error(`Command timed out after ${Math.round(timeoutMs / 1000)} seconds.`));
-    }, timeoutMs);
+    }, timeoutMs) : undefined;
 
     client.exec(script, (error, stream) => {
         if (error) {
+            client.removeListener('close', connectionClosed);
             clearTimeout(timer);
             settled = true;
             reject(error);
             return;
         }
         streamRef = stream;
+        if (settled) { try { stream.close(); } catch {} return; }
         let lastUpdate=0;
         const publish=()=>{if(onOutput && Date.now()-lastUpdate>=500){lastUpdate=Date.now();onOutput(Buffer.concat(stdoutChunks).toString('utf8'),Buffer.concat(stderrChunks).toString('utf8'));}};
         stream.on('data', (data: Buffer) => {appendLimited(stdoutChunks, Buffer.from(data), stdoutState);publish();});
@@ -434,12 +445,14 @@ const execScript = (
         stream.on('error', (error: Error) => {
             if (settled) return;
             settled = true;
+            client.removeListener('close', connectionClosed);
             clearTimeout(timer);
             reject(error);
         });
         stream.on('close', (code: number | null) => {
             if (settled) return;
             settled = true;
+            client.removeListener('close', connectionClosed);
             clearTimeout(timer);
             const truncationNote = '\n[output truncated at 1 MiB]';
             resolve({
@@ -580,7 +593,7 @@ const runTarget = async (job: JobRow, target: TargetRow, payload: JobPayload): P
     try {
         if (target.connection_id === null) throw new Error('The target server has been deleted.');
         const details = await SshService.getConnectionDetails(target.connection_id, jobCredentials.get(job.id)?.get(target.connection_id));
-        client = await SshService.establishSshConnection(details, Math.min(job.timeout_seconds * 1000, 30000));
+        client = await SshService.establishSshConnection(details, job.timeout_seconds > 0 ? Math.min(job.timeout_seconds * 1000, 30000) : 30000);
         if (!activeClients.has(job.id)) activeClients.set(job.id, new Set());
         activeClients.get(job.id)?.add(client);
 

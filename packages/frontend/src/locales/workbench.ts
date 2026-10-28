@@ -40,7 +40,7 @@ const en = {
   analysisHint: "Discuss and analyze without executing SSH commands.",
   manualHint: "Review exact servers and commands before each execution round.",
   autoHint:
-    "Within the selected scope, the agent can execute, review results and continue until done or the round limit.",
+    "Within the selected scope, execution continues until done or manually stopped, without a command deadline or round limit.",
   task: "Describe the task…",
   follow: "Add instructions, reject a proposal, or continue the discussion…",
   start: "Start task",
@@ -48,7 +48,7 @@ const en = {
   consent:
     "Send this task, selected servers and attached context to my configured AI provider. Secrets are redacted, but review attached logs yourself.",
   autoConsent:
-    "Authorize SSH commands for this task on the selected servers, up to the configured round limit. Commands may modify or delete data.",
+    "Authorize automatic SSH execution in this conversation on the selected servers, without time or round limits. Commands may modify/delete data and incur ongoing API costs. Stop manually when needed.",
   approveConsent: "I approve these exact commands on the listed servers.",
   approve: "Approve & execute",
   rejectHint: "To reject or change this proposal, send instructions below.",
@@ -70,7 +70,9 @@ const en = {
   inventory: "Share device inventory and aliases",
   monitor: "Share monitoring snapshot",
   logs: "Attached logs / context",
-  advanced: "Execution limits",
+  advanced: "Advanced settings",
+  resumeHint:
+    "Continue chatting here. Stopped or interrupted automation returns to per-round approval; review previous results before executing again.",
   concurrency: "Parallel servers (1–20)",
   timeout: "Command timeout (seconds)",
   rounds: "Maximum rounds (1–30)",
@@ -128,7 +130,7 @@ const en = {
   approvalTitle: "Execution approval",
   followConsent:
     "Follow-up messages use the same provider and context permissions as this task.",
-  cancelledHint: "This task has ended. Copy it to a new task to continue.",
+  cancelledHint: "Continue this conversation whenever you need.",
   redacted: "Secrets are redacted before sending and storing results.",
   scopeChange: "New task settings do not change an existing task.",
   apiHint:
@@ -179,7 +181,8 @@ const zh: typeof en = {
   autonomous: "授权本次任务",
   analysisHint: "可以讨论和分析，不会执行 SSH 命令。",
   manualHint: "每轮执行前，确认具体服务器和命令。",
-  autoHint: "在所选服务器和轮次上限内，自动执行、读取结果并继续。",
+  autoHint:
+    "在所选服务器上自动执行、读取结果并继续，直到完成或手动停止，不设命令时间和轮数上限。",
   task: "描述你想完成的任务…",
   follow: "补充要求、拒绝当前方案，或继续讨论…",
   start: "开始任务",
@@ -187,7 +190,7 @@ const zh: typeof en = {
   consent:
     "同意将本次任务、所选服务器与附加上下文发送至我配置的 AI 服务商。已自动脱敏，附加日志仍请自行检查。",
   autoConsent:
-    "授权本次任务在所选服务器上执行 SSH 命令，最多执行设定轮数。命令可能修改或删除数据。",
+    "授权此会话在所选服务器上自动执行 SSH 命令，不设时间和轮数上限。可能修改或删除数据并持续产生 API 费用，需要时请手动停止。",
   approveConsent: "我批准在列出的服务器上执行这些具体命令。",
   approve: "批准并执行",
   rejectHint: "如需拒绝或修改方案，在下方发送你的要求即可。",
@@ -207,7 +210,9 @@ const zh: typeof en = {
   inventory: "提供设备清单与别名",
   monitor: "提供监控快照",
   logs: "附加日志 / 上下文",
-  advanced: "执行限制",
+  advanced: "高级设置",
+  resumeHint:
+    "可直接在此继续聊天。停止或中断后的自动执行会恢复为每轮审批；再次执行前请检查之前的结果。",
   concurrency: "并行服务器（1–20）",
   timeout: "命令超时（秒）",
   rounds: "最大轮数（1–30）",
@@ -260,7 +265,7 @@ const zh: typeof en = {
     "只有明确选择的服务器可以执行命令。设备清单与监控数据不代表执行授权。",
   approvalTitle: "命令执行审批",
   followConsent: "后续消息沿用此任务的服务商与上下文授权。",
-  cancelledHint: "任务已结束，可复制为新任务继续。",
+  cancelledHint: "可随时回到此会话继续聊天。",
   redacted: "发送上下文和保存结果前自动遮盖敏感信息。",
   scopeChange: "新任务的设置不会改变已有任务。",
   apiHint:
@@ -312,7 +317,7 @@ const ja: typeof en = {
   analysisHint: "相談と分析のみ。SSH コマンドは実行しません。",
   manualHint: "各ラウンドで対象とコマンドを確認して承認します。",
   autoHint:
-    "選択した対象とラウンド上限内で、実行・結果確認を自動で繰り返します。",
+    "選択した対象で完了または手動停止まで実行・結果確認を繰り返します。時間・ラウンド上限はありません。",
   task: "実行したいタスクを入力…",
   follow: "指示を追加、提案を却下、または相談を続ける…",
   start: "タスク開始",
@@ -320,7 +325,7 @@ const ja: typeof en = {
   consent:
     "タスク、選択したサーバー、添付情報を設定済み AI に送信します。機密情報はマスクされますが、添付ログをご確認ください。",
   autoConsent:
-    "選択したサーバーで、設定ラウンド上限まで SSH 実行を許可します。データの変更や削除が発生する場合があります。",
+    "この会話の対象サーバーで時間・ラウンド制限なしの自動 SSH 実行を許可します。データ変更・削除や継続的な API 費用が発生し得ます。必要時に手動停止してください。",
   approveConsent: "表示されたサーバーで、これらのコマンドを承認します。",
   approve: "承認して実行",
   rejectHint: "提案を却下・変更する場合は、下の入力欄で指示してください。",
@@ -340,7 +345,9 @@ const ja: typeof en = {
   inventory: "デバイス一覧と別名を共有",
   monitor: "監視スナップショットを共有",
   logs: "添付ログ / コンテキスト",
-  advanced: "実行制限",
+  advanced: "詳細設定",
+  resumeHint:
+    "この会話を続けられます。停止・中断後は各ラウンドの承認に戻ります。再実行前に以前の結果を確認してください。",
   concurrency: "並列サーバー数（1–20）",
   timeout: "コマンドタイムアウト（秒）",
   rounds: "最大ラウンド数（1–30）",
@@ -396,7 +403,7 @@ const ja: typeof en = {
   approvalTitle: "コマンド実行の承認",
   followConsent:
     "追加メッセージはこのタスクの送信先と情報共有の許可を使用します。",
-  cancelledHint: "タスクは終了しました。新しいタスクへコピーできます。",
+  cancelledHint: "いつでもこの会話を続けられます。",
   redacted: "送信前と結果保存前に機密情報をマスクします。",
   scopeChange: "新しいタスクの設定は既存のタスクを変更しません。",
   apiHint:

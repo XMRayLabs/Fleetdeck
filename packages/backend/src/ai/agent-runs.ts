@@ -67,7 +67,7 @@ type Run = {
   includeMonitor: boolean;
   includeInventory: boolean;
   context: string;
-  deadline: number;
+  deadline?: number; // Legacy records only; conversations no longer expire.
   error?: string;
 };
 type Deps = {
@@ -156,7 +156,11 @@ async function read(id: string, user: number): Promise<Run> {
     [id, user],
   );
   if (!row) throw new Error("Agent task not found.");
-  return JSON.parse(decrypt(row.encrypted_body));
+  const run: Run = JSON.parse(decrypt(row.encrypted_body));
+  // Normalize legacy limits so old conversations also benefit from the upgrade.
+  run.settings.timeoutSeconds = 0;
+  run.settings.maxRounds = 0;
+  return run;
 }
 function add(run: Run, entry: Omit<Entry, "id" | "at">) {
   run.entries.push({ ...entry, id: randomUUID(), at: Date.now() });
@@ -234,8 +238,8 @@ export function runSettings(raw: any, model: string): Settings {
     reasoning,
     mode,
     concurrency: integer(raw.concurrency, 5, 1, 20),
-    timeoutSeconds: integer(raw.timeoutSeconds, 120, 10, 1800),
-    maxRounds: integer(raw.maxRounds, 10, 1, 30),
+    timeoutSeconds: 0,
+    maxRounds: 0,
   };
 }
 export function agentActions(value: any, scope: number[]): Action[] {
@@ -336,10 +340,6 @@ export function agentRunRouter(deps: Deps) {
     ];
   }
   async function validate(run: Run) {
-    if (Date.now() > run.deadline)
-      throw new Error(
-        "Task authorization expired after one hour. Start a new task.",
-      );
     const c = await deps.config(run.user);
     if (!c.key || hash(c) !== run.configHash)
       throw new Error("AI endpoint or key changed. Start a new task.");
@@ -355,8 +355,6 @@ export function agentRunRouter(deps: Deps) {
     await validate(run);
     if (run.settings.mode === "analysis")
       throw new Error("Analysis mode cannot execute SSH commands.");
-    if (run.round >= run.settings.maxRounds)
-      throw new Error("Execution round limit reached.");
     run.round++;
     run.approval = undefined;
     run.phase = "executing";
@@ -398,10 +396,6 @@ export function agentRunRouter(deps: Deps) {
           await cancelJob(jobId, run.user).catch(() => {});
           return;
         }
-        if (Date.now() > run.deadline) {
-          await cancelJob(jobId, run.user).catch(() => {});
-          throw new Error("Agent task exceeded its one-hour limit.");
-        }
         const job = await getJobDetail(jobId, run.user);
         if (!job) throw new Error("SSH task disappeared.");
         if (!["queued", "running"].includes(String(job.status))) {
@@ -441,8 +435,6 @@ export function agentRunRouter(deps: Deps) {
       try {
         if (approved) await executeActions(run, approved, state);
         while (!state.stop && !state.pause) {
-          if (Date.now() > run.deadline)
-            throw new Error("Agent task exceeded its one-hour limit.");
           const c = await validate(run);
           run.phase = "thinking";
           await persist(run);
@@ -463,7 +455,8 @@ export function agentRunRouter(deps: Deps) {
                 monitoring: monitor,
                 mode: run.settings.mode,
                 round: run.round,
-                maxRounds: run.settings.maxRounds,
+                executionLimits:
+                  "No command time limit or round limit. Continue until the objective is complete or the user stops execution.",
                 history: agentHistory(run.entries),
               },
               redactions,
@@ -515,10 +508,6 @@ export function agentRunRouter(deps: Deps) {
           });
           if (!actions.length || run.settings.mode === "analysis") {
             run.phase = "completed";
-            break;
-          }
-          if (run.round >= run.settings.maxRounds) {
-            run.phase = "limited";
             break;
           }
           run.approval = { id: randomUUID(), actions };
@@ -741,7 +730,6 @@ export function agentRunRouter(deps: Deps) {
         entries: [],
         includeMonitor: includeMonitor === true,
         includeInventory: includeInventory === true,
-        deadline: now + 3600000,
       };
       add(run, { type: "user", text: run.objective });
       await persist(run);
@@ -771,10 +759,7 @@ export function agentRunRouter(deps: Deps) {
     "/:id/settings",
     mutate(async (req, res, user) => {
       const run = await read(req.params.id, user);
-      if (
-        active.has(run.id) ||
-        ["cancelled", "interrupted", "limited"].includes(run.phase)
-      )
+      if (active.has(run.id))
         throw new Error(
           "Pause or finish the current round before changing task settings.",
         );
@@ -785,7 +770,8 @@ export function agentRunRouter(deps: Deps) {
         throw new Error("This discussion has no SSH scope. Start a new task.");
       if (
         settings.mode === "auto" &&
-        run.settings.mode !== "auto" &&
+        (run.settings.mode !== "auto" ||
+          ["cancelled", "interrupted", "limited"].includes(run.phase)) &&
         req.body.confirmAuto !== true
       )
         throw new Error("Explicit task automation approval is required.");
@@ -850,12 +836,7 @@ export function agentRunRouter(deps: Deps) {
     "/:id/message",
     mutate(async (req, res, user) => {
       const run = await read(req.params.id, user);
-      if (
-        active.has(run.id) ||
-        run.phase === "cancelled" ||
-        run.phase === "interrupted" ||
-        run.phase === "limited"
-      )
+      if (active.has(run.id))
         throw new Error("Stop or wait for this task before continuing.");
       if (
         typeof req.body.message !== "string" ||
@@ -865,9 +846,19 @@ export function agentRunRouter(deps: Deps) {
         throw new Error("Enter a message (maximum 8000 characters).");
       if (terminal.has(run.phase)) await capacity(user, run.id);
       await validate(run);
+      // Continuing the chat must not silently resume stopped automatic execution.
+      if (
+        ["cancelled", "interrupted", "limited"].includes(run.phase) &&
+        run.settings.mode === "auto"
+      ) {
+        run.settings.mode = "manual";
+        add(run, {
+          type: "settings",
+          text: "Resumed conversation with per-round command approval. Previous automatic execution was stopped.",
+        });
+      }
       run.approval = undefined;
       run.error = undefined;
-      run.deadline = Date.now() + 3600000;
       if (
         req.body.context !== undefined &&
         (typeof req.body.context !== "string" ||

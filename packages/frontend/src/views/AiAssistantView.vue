@@ -45,9 +45,7 @@ const configDirty = computed(
 );
 const reasoning = ref("auto"),
   mode = ref("manual"),
-  concurrency = ref(5),
-  timeout = ref(120),
-  maxRounds = ref(10);
+  concurrency = ref(5);
 const includeMonitor = ref(false),
   includeInventory = ref(false),
   consent = ref(false),
@@ -93,12 +91,7 @@ const ended = computed(() =>
     current.value?.phase,
   ),
 );
-const canFollow = computed(
-  () =>
-    current.value &&
-    !active.value &&
-    !["cancelled", "interrupted", "limited"].includes(current.value.phase),
-);
+const canFollow = computed(() => current.value && !active.value);
 const visible = computed(() =>
   connections.value.filter((c) =>
     `${c.name} ${c.host}`.toLowerCase().includes(search.value.toLowerCase()),
@@ -296,8 +289,6 @@ function start() {
           reasoning: reasoning.value,
           mode: mode.value,
           concurrency: concurrency.value,
-          timeoutSeconds: timeout.value,
-          maxRounds: maxRounds.value,
         },
         includeMonitor: includeMonitor.value,
         includeInventory: includeInventory.value,
@@ -348,7 +339,8 @@ function changeSetting(field: string, event: Event) {
   if (
     field === "mode" &&
     value === "auto" &&
-    current.value.settings.mode !== "auto" &&
+    (current.value.settings.mode !== "auto" ||
+      ["cancelled", "interrupted", "limited"].includes(current.value.phase)) &&
     !window.confirm(t("wb.autoConsent"))
   ) {
     (event.target as HTMLSelectElement).value = current.value.settings.mode;
@@ -389,8 +381,6 @@ function retry() {
   reasoning.value = old.settings.reasoning;
   mode.value = old.settings.mode;
   concurrency.value = old.settings.concurrency;
-  timeout.value = old.settings.timeoutSeconds;
-  maxRounds.value = old.settings.maxRounds;
   includeMonitor.value = old.includeMonitor;
   includeInventory.value = old.includeInventory;
 }
@@ -462,8 +452,6 @@ watch(
     reasoning,
     mode,
     concurrency,
-    timeout,
-    maxRounds,
     includeMonitor,
     includeInventory,
   ],
@@ -836,9 +824,7 @@ onBeforeUnmount(() => {
                   : "wb." + current.settings.mode,
               )
             }}</span
-            ><span
-              >{{ t("wb.round") }} {{ current.round }} /
-              {{ current.settings.maxRounds }}</span
+            ><span>{{ t("wb.round") }} {{ current.round }}</span
             ><span>{{ current.targetIds.length }} {{ t("wb.servers") }}</span>
           </div>
           <article
@@ -1092,21 +1078,7 @@ onBeforeUnmount(() => {
                   v-model.number="concurrency"
                   type="number"
                   min="1"
-                  max="20" /></label
-              ><label
-                >{{ t("wb.timeout")
-                }}<input
-                  v-model.number="timeout"
-                  type="number"
-                  min="10"
-                  max="1800" /></label
-              ><label
-                >{{ t("wb.rounds")
-                }}<input
-                  v-model.number="maxRounds"
-                  type="number"
-                  min="1"
-                  max="30"
+                  max="20"
               /></label>
             </div>
           </details>
@@ -1154,6 +1126,14 @@ onBeforeUnmount(() => {
               {{ t("wb.recent") }}
             </button>
           </div>
+          <p
+            v-if="
+              ['cancelled', 'interrupted', 'limited'].includes(current.phase)
+            "
+            class="muted"
+          >
+            {{ t("wb.resumeHint") }}
+          </p>
           <details v-if="context" class="context-attachment" open>
             <summary>
               {{ t("wb.logs") }} ({{ context.length.toLocaleString() }})

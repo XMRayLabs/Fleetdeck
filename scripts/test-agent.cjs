@@ -83,8 +83,14 @@ let database, server;
     assert.equal(payloads[0].model, "picked-model");
     assert.equal(payloads[1].reasoning_effort, undefined);
     assert.equal(payloads[0].max_completion_tokens, 8192);
-    assert.match(payloads[0].messages[0].content, /Before editing, inspect the actual file/);
-    assert.match(payloads[0].messages[0].content, /Terminal attachments are a bounded snapshot/);
+    assert.match(
+      payloads[0].messages[0].content,
+      /Before editing, inspect the actual file/,
+    );
+    assert.match(
+      payloads[0].messages[0].content,
+      /Terminal attachments are a bounded snapshot/,
+    );
   } finally {
     await new Promise((r) => fixture.close(r));
   }
@@ -123,10 +129,59 @@ let database, server;
     { mode: "unsafe" },
     { reasoning: "anything" },
     { concurrency: 21 },
-    { timeoutSeconds: 0 },
-    { maxRounds: 31 },
   ])
     assert.throws(() => runSettings(bad, "model"));
+  assert.equal(
+    runSettings({ timeoutSeconds: 120, maxRounds: 1 }, "model").timeoutSeconds,
+    0,
+  );
+  assert.equal(
+    runSettings({ timeoutSeconds: 120, maxRounds: 1 }, "model").maxRounds,
+    0,
+  );
+  const { EventEmitter } = require("node:events");
+  const fakeClient = new EventEmitter();
+  const fakeStream = new EventEmitter();
+  fakeStream.stderr = new EventEmitter();
+  fakeStream.close = () => fakeStream.emit("close", null);
+  fakeClient.exec = (_script, cb) => cb(null, fakeStream);
+  const savedTimer = global.setTimeout;
+  let timers = 0,
+    unlimitedCommand;
+  try {
+    global.setTimeout = (...args) => {
+      timers++;
+      return savedTimer(...args);
+    };
+    unlimitedCommand = jobs.execScript(fakeClient, ["long command"], true, 0);
+  } finally {
+    global.setTimeout = savedTimer;
+  }
+  assert.equal(
+    timers,
+    0,
+    "Unlimited SSH execution must not install a deadline timer",
+  );
+  fakeStream.emit("data", Buffer.from("still running"));
+  fakeStream.emit("close", 0);
+  assert.equal((await unlimitedCommand).stdout, "still running");
+  assert.equal(fakeClient.listenerCount("close"), 0);
+  const disconnectedClient = new EventEmitter();
+  disconnectedClient.exec = () => {};
+  const disconnected = jobs.execScript(disconnectedClient, ["sleep"], true, 0);
+  const rejectedOnClose = assert.rejects(disconnected, /SSH connection closed/);
+  disconnectedClient.emit("close");
+  await rejectedOnClose;
+  const timedClient = new EventEmitter();
+  timedClient.exec = () => {};
+  await assert.rejects(
+    jobs.execScript(timedClient, ["sleep"], true, 10),
+    /Command timed out/,
+  );
+  assert.equal(timedClient.listenerCount("close"), 0);
+  console.log(
+    "PASS SSH execution: zero disables deadline, bounded batch timeouts remain, disconnect settles unlimited commands",
+  );
   assert.throws(() =>
     agentActions([{ targetIds: [2], commands: ["true"] }], [1]),
   );
@@ -210,10 +265,10 @@ let database, server;
       const r = await call("GET", "/runs/" + id);
       assert.equal(r.status, 200);
       if (phases.includes(r.body.phase)) {
-        await delay(15);
-        return (await call("GET", "/runs/" + id)).body;
+        await delay(35);
+        return r.body;
       }
-      await delay(100);
+      await delay(500);
     }
     throw new Error("Task did not enter " + phases);
   };
@@ -458,15 +513,82 @@ let database, server;
   const automatic = await start({ mode: "auto" }, { confirmAuto: true });
   await wait(automatic.id, ["completed"]);
   assert.equal(executed.length, beforeAuto + 2);
-  reply = () => proposal;
+  reply = (content) =>
+    content.round < 3
+      ? proposal
+      : { analysis: "Finished after three rounds", actions: [] };
   const limited = await start(
     { mode: "auto", maxRounds: 1 },
     { confirmAuto: true },
   );
-  await wait(limited.id, ["limited"]);
-  assert.equal(executed.length, beforeAuto + 4);
+  await wait(limited.id, ["completed"]);
+  assert.equal(executed.length, beforeAuto + 8);
+  assert.ok(
+    executed.slice(beforeAuto).every((e) => e.input.timeoutSeconds === 0),
+  );
+  const rewrite = async (id, change) => {
+    const row = await db.getDb(
+      database,
+      "SELECT encrypted_body FROM ai_agent_runs WHERE id=?",
+      [id],
+    );
+    const data = JSON.parse(decrypt(row.encrypted_body));
+    Object.assign(data, change);
+    await db.runDb(
+      database,
+      "UPDATE ai_agent_runs SET phase=?,encrypted_body=? WHERE id=?",
+      [data.phase, encrypt(JSON.stringify(data)), id],
+    );
+  };
+  reply = () => proposal;
+  const expired = await start();
+  pending = await wait(expired.id, ["approval"]);
+  await rewrite(expired.id, {
+    deadline: Date.now() - 86400000,
+    round: 99,
+    settings: { ...pending.settings, timeoutSeconds: 120, maxRounds: 1 },
+  });
+  reply = () => ({ analysis: "Done", actions: [] });
+  assert.equal(
+    (
+      await call("POST", "/runs/" + expired.id + "/approve", {
+        approvalId: pending.approval.id,
+        confirm: true,
+      })
+    ).status,
+    202,
+  );
+  const continued = await wait(expired.id, ["completed"]);
+  assert.equal(continued.round, 100);
+  assert.equal(continued.settings.timeoutSeconds, 0);
+  for (const phase of [
+    "completed",
+    "failed",
+    "cancelled",
+    "interrupted",
+    "limited",
+  ]) {
+    await rewrite(expired.id, {
+      phase,
+      deadline: Date.now() - 86400000,
+      settings: { ...continued.settings, mode: "auto" },
+    });
+    const result = await call("POST", "/runs/" + expired.id + "/message", {
+      message: "Continue the same conversation " + phase,
+    });
+    assert.equal(result.status, 202, JSON.stringify(result));
+    const resumed = await wait(expired.id, ["completed"]);
+    assert.equal(resumed.id, expired.id);
+    assert.ok(
+      resumed.entries.some(
+        (e) => e.text === "Continue the same conversation " + phase,
+      ),
+    );
+    if (["cancelled", "interrupted", "limited"].includes(phase))
+      assert.equal(resumed.settings.mode, "manual");
+  }
   console.log(
-    "PASS Agent proposal rejection by discussion, authorized multi-host automation, and hard round limit",
+    "PASS Agent no deadline/round limit, legacy expired approval, and same-session continuation after completion/stop/restart/old limit with safe reapproval",
   );
   await db.runDb(
     database,

@@ -208,10 +208,14 @@ module.exports = async (page, context, origin) => {
   await page.getByLabel("Reasoning", { exact: true }).selectOption("high");
   await page.locator(".execution-limits summary").click();
   await page.getByLabel("Parallel servers (1–20)", { exact: true }).fill("12");
-  await page.getByLabel("Maximum rounds (1–30)", { exact: true }).fill("7");
-  await page
-    .getByLabel("Command timeout (seconds)", { exact: true })
-    .fill("180");
+  assert.equal(
+    await page.getByLabel("Command timeout (seconds)", { exact: true }).count(),
+    0,
+  );
+  assert.equal(
+    await page.getByLabel("Maximum rounds (1–30)", { exact: true }).count(),
+    0,
+  );
   await page.locator(".context-attachment summary").click();
   await page
     .getByLabel("Attached logs / context", { exact: true })
@@ -267,8 +271,8 @@ module.exports = async (page, context, origin) => {
   assert.equal(created.settings.model, "fixture-instruct");
   assert.equal(created.settings.reasoning, "high");
   assert.equal(created.settings.concurrency, 12);
-  assert.equal(created.settings.timeoutSeconds, 180);
-  assert.equal(created.settings.maxRounds, 7);
+  assert.equal(created.settings.timeoutSeconds, undefined);
+  assert.equal(created.settings.maxRounds, undefined);
   assert.deepEqual(created.targetIds, [device.id]);
   assert.equal(created.settings.mode, "manual");
   assert.equal(
@@ -443,6 +447,20 @@ module.exports = async (page, context, origin) => {
   assert.equal(created.settings.mode, "auto");
   assert.equal(created.confirmAuto, true);
   await page.getByRole("button", { name: "Stop task", exact: true }).click();
+  const followAfterStop = page.getByLabel(
+    "Add instructions, reject a proposal, or continue the discussion…",
+    { exact: true },
+  );
+  await followAfterStop.fill(
+    "Continue in this same conversation after stopping",
+  );
+  await page.getByRole("button", { name: /^Send/ }).click();
+  await page
+    .getByText("Continue in this same conversation after stopping", {
+      exact: true,
+    })
+    .waitFor();
+  assert.equal(run.id, "ui-task");
   await page
     .getByRole("button", { name: "Copy to new task", exact: true })
     .waitFor();
