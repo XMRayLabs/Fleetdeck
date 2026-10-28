@@ -8,6 +8,7 @@ import WorkspaceConnectionListComponent from './WorkspaceConnectionList.vue';
 import TabBarContextMenu from './TabBarContextMenu.vue';
 import TransferProgressModal from './TransferProgressModal.vue';
 import { useSessionStore } from '../stores/session.store';
+import { useAgentStore } from '../stores/agent.store';
 import { useConnectionsStore, type ConnectionInfo } from '../stores/connections.store';
 import { useLayoutStore, type PaneName } from '../stores/layout.store';
 import { useWorkspaceEventEmitter, useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents'; // +++ 导入 useWorkspaceEventOff +++
@@ -60,6 +61,7 @@ const closeSession = (event: MouseEvent, sessionId: string) => {
 
 // --- 本地状态 ---
 const sessionStore = useSessionStore(); // Session store 保持不变
+const agent = useAgentStore();
 const showConnectionListPopup = ref(false); // 连接列表弹出状态
 const draggableSessions = ref<SessionTabInfoWithStatus[]>([]); // + Local state for draggable
 const showTransferProgressModal = ref(false); // 控制传输进度模态框的显示状态
@@ -466,6 +468,14 @@ onBeforeUnmount(() => {
     <!-- Action Buttons -->
     <div class="flex items-center ml-auto h-full flex-shrink-0">
         <slot name="workspace-tools" />
+        <button
+          class="flex items-center justify-center gap-1 px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground"
+          data-testid="terminal-agent-toggle"
+          :aria-label="t('wb.terminalAgent')"
+          :title="t('wb.terminalShortcut')"
+          :aria-expanded="agent.open"
+          @click="agent.open ? agent.close(activeSessionId) : agent.openTerminal(activeSessionId)"
+        ><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>AI</span></button>
         <button
           v-if="isWorkspaceRoute"
           class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"

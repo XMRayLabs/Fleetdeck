@@ -176,6 +176,7 @@ const proxy = (req, res, port, headers) => {
     console.log(`PASS real settings: ${locale} saved to database and retained after reload`);
   }
   await require('./test-terminal-ui.cjs')(page,context,origin);
+  await require('./test-terminal-agent-ui.cjs')(context,origin);
   if (process.env.UI_SCREENSHOT_DIR) {
     const directory = path.resolve(process.env.UI_SCREENSHOT_DIR);
     fs.mkdirSync(directory, { recursive: true });

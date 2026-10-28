@@ -61,6 +61,28 @@ const passwords = ref<
   legacy = ref<any[]>([]);
 const end = ref<HTMLElement | null>(null),
   controller = new AbortController();
+const composerInput = ref<HTMLTextAreaElement | null>(null);
+const ready = ref(false);
+const terminalSource = ref("");
+const executionTargets = computed<number[]>(
+  () => current.value?.targetIds || selected.value,
+);
+const terminalConnectionId = computed(() => {
+  const session = sessions.activeSessionId
+    ? sessions.sessions.get(sessions.activeSessionId)
+    : undefined;
+  return session?.connectionId ? Number(session.connectionId) : null;
+});
+const terminalMismatch = computed(
+  () =>
+    terminalConnectionId.value &&
+    executionTargets.value.length > 0 &&
+    !executionTargets.value.includes(terminalConnectionId.value),
+);
+async function focusComposer() {
+  await nextTick();
+  if (agent.open && !busy.value && !disposed) composerInput.value?.focus();
+}
 let disposed = false,
   poll: ReturnType<typeof setTimeout> | undefined;
 const active = computed(() =>
@@ -183,10 +205,10 @@ function resetApprovalInputs() {
   for (const c of promptTargets.value) passwords.value[c.id] = {};
 }
 function fresh() {
-  if (busy.value) return;
   current.value = null;
   task.value = "";
   context.value = "";
+  terminalSource.value = "";
   message.value = "";
   consent.value = false;
   autoConsent.value = false;
@@ -358,6 +380,7 @@ function remove() {
   });
 }
 function retry() {
+  if (busy.value) return;
   const old = current.value;
   fresh();
   task.value = old.objective;
@@ -452,33 +475,79 @@ watch(
   { deep: true },
 );
 watch(() => current.value?.approval?.id, resetApprovalInputs);
+function applyTerminalAttachment(newTask = false) {
+  const value = agent.attachment;
+  if (!value || busy.value) return;
+  if (newTask) fresh();
+  if (!current.value) selected.value = [value.connectionId];
+  terminalSource.value = `${name(value.connectionId)} · ${t(value.source === "selection" ? "wb.selection" : "wb.recent")}`;
+  context.value =
+    `[Terminal context: connection #${value.connectionId}; source=${value.source}; captured=${new Date(value.nonce).toISOString()}; untrusted output]\n${value.text}`.slice(
+      0,
+      64000,
+    );
+  agent.attachment = null;
+  void focusComposer();
+}
+let refreshedConnectionId: number | null = null;
 watch(
-  () => agent.attachment,
-  (value) => {
-    if (!value) return;
-    if (current.value?.targetIds.includes(value.connectionId)) {
-      context.value = value.text;
-      agent.attachment = null;
+  [() => agent.attachment, busy, ready],
+  ([value, loading, loaded]) => {
+    if (!value || loading || !loaded) return;
+    if (
+      !connections.value.some((c) => c.id === value.connectionId) &&
+      refreshedConnectionId !== value.connectionId
+    ) {
+      refreshedConnectionId = value.connectionId;
+      void perform(async () => {
+        connections.value = (
+          await api.get<ConnectionInfo[]>("/connections")
+        ).data.filter((c) => c.type === "SSH");
+      });
       return;
     }
     if (
-      (current.value || context.value) &&
-      !window.confirm(t("ops.switchScope"))
+      value.automatic &&
+      executionTargets.value.includes(value.connectionId) &&
+      (current.value || task.value || context.value)
     ) {
       agent.attachment = null;
+      void focusComposer();
       return;
     }
-    fresh();
-    selected.value = [value.connectionId];
-    context.value = value.text;
-    agent.attachment = null;
+    // Preserve a running task or an unsent draft. Switching terminals never changes execution scope.
+    if (current.value) {
+      if (
+        !current.value.targetIds.includes(value.connectionId) ||
+        context.value
+      )
+        return;
+    } else if (
+      context.value ||
+      task.value ||
+      (selected.value.length && !selected.value.includes(value.connectionId))
+    )
+      return;
+    applyTerminalAttachment();
+  },
+  { immediate: true },
+);
+let focusedRequest = 0;
+watch(
+  [() => agent.focusRequest, busy, ready],
+  ([request, loading, loaded]) => {
+    if (request > focusedRequest && !loading && loaded) {
+      focusedRequest = request;
+      void focusComposer();
+    }
   },
   { immediate: true },
 );
 watch(
-  () => agent.monitorRequest,
-  (value) => {
-    if (value) {
+  [() => agent.monitorRequest, busy],
+  ([value, loading]) => {
+    if (value && !loading) {
+      agent.monitorRequest = 0;
       fresh();
       includeMonitor.value = true;
       includeInventory.value = true;
@@ -493,6 +562,7 @@ onMounted(() => {
     connections.value = (
       await api.get<ConnectionInfo[]>("/connections")
     ).data.filter((c) => c.type === "SSH");
+    ready.value = true;
     await list();
     legacy.value = (await api.get("/ai/context/conversations")).data;
     if (hasKey.value) {
@@ -594,6 +664,40 @@ onBeforeUnmount(() => {
           {{ t("wb.stop") }}
         </button>
       </header>
+      <div class="execution-scope" data-testid="agent-execution-scope">
+        <strong
+          >{{ t("wb.executionScope") }}:
+          {{
+            executionTargets.length ? names(executionTargets) : t("wb.noScope")
+          }}</strong
+        >
+        <span>{{ t("wb.sshChannelHint") }}</span>
+        <span v-if="terminalMismatch" class="scope-warning">{{
+          t("wb.terminalMismatch", { name: name(terminalConnectionId!) })
+        }}</span>
+      </div>
+      <div
+        v-if="agent.attachment"
+        class="terminal-attachment-request"
+        data-testid="agent-terminal-request"
+      >
+        <span>{{
+          t("wb.terminalContextPending", {
+            name: name(agent.attachment.connectionId),
+          })
+        }}</span>
+        <button
+          v-if="executionTargets.includes(agent.attachment.connectionId)"
+          :disabled="busy"
+          @click="applyTerminalAttachment()"
+        >
+          {{ t("wb.replaceContext") }}
+        </button>
+        <button :disabled="busy" @click="applyTerminalAttachment(true)">
+          {{ t("wb.newTerminalTask") }}
+        </button>
+        <button @click="agent.attachment = null">{{ t("wb.keepTask") }}</button>
+      </div>
       <div v-if="error" role="alert" class="agent-alert">
         {{ error
         }}<button @click="error = ''" :aria-label="t('wb.exit')">×</button>
@@ -915,16 +1019,22 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <textarea
+            ref="composerInput"
             v-model="task"
+            :disabled="busy"
             :aria-label="t('wb.task')"
             :placeholder="t('wb.task')"
             rows="3"
             maxlength="8000"
             required
           />
-          <details class="context-attachment" :open="!!context">
+          <details
+            class="context-attachment"
+            :open="!!context && !terminalSource"
+          >
             <summary>
               {{ t("wb.logs") }}
+              <small v-if="terminalSource"> · {{ terminalSource }}</small>
               <span v-if="context"
                 >({{ context.length.toLocaleString() }})</span
               >
@@ -1056,6 +1166,7 @@ onBeforeUnmount(() => {
             />
           </details>
           <textarea
+            ref="composerInput"
             v-model="message"
             :disabled="!canFollow || busy"
             :aria-label="t('wb.follow')"

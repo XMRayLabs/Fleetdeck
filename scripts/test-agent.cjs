@@ -83,6 +83,8 @@ let database, server;
     assert.equal(payloads[0].model, "picked-model");
     assert.equal(payloads[1].reasoning_effort, undefined);
     assert.equal(payloads[0].max_completion_tokens, 8192);
+    assert.match(payloads[0].messages[0].content, /Before editing, inspect the actual file/);
+    assert.match(payloads[0].messages[0].content, /Terminal attachments are a bounded snapshot/);
   } finally {
     await new Promise((r) => fixture.close(r));
   }

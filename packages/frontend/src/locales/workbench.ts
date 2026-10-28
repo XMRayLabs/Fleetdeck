@@ -1,4 +1,17 @@
 const en = {
+  terminalAgent: "AI Agent",
+  terminalShortcut: "Open / close AI Agent (Ctrl+I / ⌘I)",
+  executionScope: "Execution servers",
+  noScope: "None selected",
+  sshChannelHint:
+    "Runs commands and edits files over a separate SSH channel. Does not type into your terminal; use absolute paths.",
+  terminalMismatch:
+    "Active terminal: {name}. This task still targets the servers listed above.",
+  terminalContextPending:
+    "Terminal context from {name} is ready. Your current task and draft have not been changed.",
+  newTerminalTask: "New task on this server",
+  keepTask: "Keep current task",
+  replaceContext: "Replace attached context",
   title: "Agent workspace",
   newTask: "New task",
   tasks: "Tasks",
@@ -127,6 +140,18 @@ const en = {
   closeScope: "Close server selector",
 };
 const zh: typeof en = {
+  terminalAgent: "AI Agent",
+  terminalShortcut: "打开 / 关闭 AI Agent（Ctrl+I / ⌘I）",
+  executionScope: "执行服务器",
+  noScope: "尚未选择",
+  sshChannelHint:
+    "通过独立 SSH 通道执行命令、修改文件，不向人工终端输入按键；路径请使用绝对路径。",
+  terminalMismatch: "当前终端为 {name}，此任务仍操作上方列出的服务器。",
+  terminalContextPending:
+    "已准备好 {name} 的终端上下文，尚未更改当前任务和草稿。",
+  newTerminalTask: "在此服务器新建任务",
+  keepTask: "保留当前任务",
+  replaceContext: "替换附加上下文",
   title: "Agent 工作台",
   newTask: "新任务",
   tasks: "任务",
@@ -246,6 +271,19 @@ const zh: typeof en = {
   closeScope: "关闭服务器选择",
 };
 const ja: typeof en = {
+  terminalAgent: "AI Agent",
+  terminalShortcut: "AI Agent を開く / 閉じる（Ctrl+I / ⌘I）",
+  executionScope: "実行対象サーバー",
+  noScope: "未選択",
+  sshChannelHint:
+    "独立した SSH チャネルでコマンド実行とファイル編集を行います。端末にキーを送信しません。絶対パスを使用してください。",
+  terminalMismatch:
+    "現在の端末: {name}。タスクの対象は上記のサーバーのままです。",
+  terminalContextPending:
+    "{name} の端末コンテキストを準備しました。現在のタスクと下書きは変更していません。",
+  newTerminalTask: "このサーバーで新しいタスク",
+  keepTask: "現在のタスクを維持",
+  replaceContext: "添付コンテキストを置換",
   title: "Agent ワークスペース",
   newTask: "新しいタスク",
   tasks: "タスク",

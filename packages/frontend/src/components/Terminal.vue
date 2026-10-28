@@ -82,6 +82,7 @@ onMounted(() => {
   removeAgentReader = registerAgentTerminal(props.sessionId, {
     connectionId: Number(sessionStore.sessions.get(props.sessionId)?.connectionId),
     selection: () => terminal?.getSelection() || '',
+    focus: () => { if (props.isActive) terminal?.focus(); },
     recent: () => {
       const buffer = terminal?.buffer.active; if (!buffer) return '';
       const end = buffer.baseY + buffer.cursorY + 1; const lines = [];

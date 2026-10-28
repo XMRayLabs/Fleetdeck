@@ -641,8 +641,10 @@
 }
 :global(.fd-agent-dock .agent-workspace) {
   display: flex;
-  height: calc(100dvh - 150px);
-  min-height: 550px;
+  flex: 1;
+  width: 100%;
+  height: auto;
+  min-height: 0;
   border-radius: 8px;
 }
 :global(.fd-agent-dock .agent-main) {
@@ -808,4 +810,37 @@
 .preview-context {
   font-size: 11px !important;
   padding: 4px 7px !important;
+}
+.execution-scope {
+  display: grid;
+  gap: 4px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  flex: none;
+}
+.execution-scope span {
+  color: var(--text-secondary);
+}
+.execution-scope .scope-warning {
+  color: var(--color-warning, #ac6519);
+}
+.terminal-attachment-request {
+  padding: 10px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border-color);
+  flex: none;
+}
+.terminal-attachment-request > span {
+  width: 100%;
+}
+:global(.fd-agent-dock .composer) {
+  max-height: 65%;
+  overflow-y: auto;
+  flex: none;
 }
